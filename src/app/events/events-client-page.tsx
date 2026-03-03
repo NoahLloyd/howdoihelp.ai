@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import type { Resource, GeoData } from "@/types";
 import { getGeoData } from "@/lib/geo";
 import { SubmitForm } from "@/components/public/submit-form";
@@ -203,6 +204,19 @@ export function EventsClientPage({ resources }: EventsClientPageProps) {
                </table>
            </div>
         </div>
+      </div>
+
+      {/* API link */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 -mt-20 pb-16 text-center">
+        <p className="text-xs text-muted-foreground">
+          This data is available via our{" "}
+          <Link
+            href="/developers"
+            className="text-accent hover:underline"
+          >
+            free public API
+          </Link>
+        </p>
       </div>
 
       {showSubmit && (
