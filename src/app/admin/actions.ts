@@ -401,6 +401,125 @@ export async function rejectCommunityCandidate(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+// ─── Program Candidates ──────────────────────────────────
+
+export interface ProgramCandidate {
+  id: string;
+  title: string;
+  description: string | null;
+  url: string;
+  source: string;
+  source_id: string | null;
+  source_org: string | null;
+  location: string | null;
+  submitted_by: string | null;
+  course_type: string | null;
+  duration_description: string | null;
+  duration_hours: number | null;
+  application_deadline: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  date_range: string | null;
+  scraped_text: string | null;
+  ai_is_real_program: boolean | null;
+  ai_is_relevant: boolean | null;
+  ai_relevance_score: number | null;
+  ai_quality_score: number | null;
+  ai_suggested_ev: number | null;
+  ai_suggested_friction: number | null;
+  ai_program_type: string | null;
+  ai_clean_title: string | null;
+  ai_clean_description: string | null;
+  ai_reasoning: string | null;
+  duplicate_of: string | null;
+  status: string;
+  processed_at: string | null;
+  promoted_at: string | null;
+  promoted_resource_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchProgramCandidates(
+  status?: string
+): Promise<ProgramCandidate[]> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+
+  let query = supabase
+    .from("program_candidates")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data as ProgramCandidate[]) || [];
+}
+
+export async function promoteProgramCandidate(id: string): Promise<void> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+
+  const { data: candidate, error: fetchErr } = await supabase
+    .from("program_candidates")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (fetchErr || !candidate) throw new Error("Candidate not found");
+
+  const resourceId = `eval-prog-${candidate.source}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+  const { error: insertErr } = await supabase.from("resources").insert({
+    id: resourceId,
+    title: candidate.ai_clean_title || candidate.title,
+    description: candidate.ai_clean_description || candidate.description || "",
+    url: candidate.url,
+    source_org: candidate.source_org || candidate.source,
+    category: "programs",
+    location: candidate.location || "Online",
+    min_minutes: Math.round((candidate.duration_hours || 20) * 60),
+    ev_general: candidate.ai_suggested_ev || 0.6,
+    friction: candidate.ai_suggested_friction || 0.4,
+    enabled: true,
+    status: "approved",
+    deadline_date: candidate.application_deadline || null,
+    event_date: candidate.start_date || null,
+    activity_score: 0.9,
+    url_status: "reachable",
+    source: candidate.source,
+    source_id: candidate.source_id,
+    created_at: new Date().toISOString(),
+  });
+
+  if (insertErr) throw new Error(insertErr.message);
+
+  const { error: updateErr } = await supabase
+    .from("program_candidates")
+    .update({
+      status: "promoted",
+      promoted_at: new Date().toISOString(),
+      promoted_resource_id: resourceId,
+    })
+    .eq("id", id);
+
+  if (updateErr) throw new Error(updateErr.message);
+}
+
+export async function rejectProgramCandidate(id: string): Promise<void> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+  const { error } = await supabase
+    .from("program_candidates")
+    .update({ status: "rejected" })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 // ─── API Usage / Cost Stats ────────────────────────────────
 
 export interface ApiUsageStats {

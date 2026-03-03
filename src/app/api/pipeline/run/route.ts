@@ -14,6 +14,9 @@ const SCRIPT_MAP: Record<string, string> = {
   "sync-communities": "scripts/sync-communities.ts",
   "evaluate-community": "scripts/evaluate-community.ts",
   "sync-all-communities": "scripts/sync-all-communities.ts",
+  // Programs pipeline
+  "gather-bluedot": "scripts/gatherers/gather-bluedot.ts",
+  "sync-programs": "scripts/sync-programs.ts",
 };
 
 export const dynamic = "force-dynamic";
