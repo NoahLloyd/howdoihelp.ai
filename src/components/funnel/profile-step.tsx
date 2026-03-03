@@ -7,7 +7,7 @@ import { ProfileConfirmation } from "@/components/funnel/profile-confirmation";
 import type { ProfilePlatform, EnrichedProfile } from "@/types";
 
 interface ProfileStepProps {
-  onSubmit: (url: string, platform: ProfilePlatform, profile?: EnrichedProfile) => void;
+  onSubmit: (url: string, platform: ProfilePlatform, profile?: EnrichedProfile, profileText?: string) => void;
   onSkip: () => void;
 }
 
@@ -207,13 +207,14 @@ export function ProfileStep({ onSubmit, onSkip }: ProfileStepProps) {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.url) {
-          handleEnrich(data.url);
+        if (data.text) {
+          // Go straight to results with the raw Perplexity text
+          onSubmit(query, "other", undefined, data.text);
           return;
         }
       }
 
-      setError("Couldn't find a matching profile. Try pasting a direct link instead.");
+      setError("Couldn't find information about this person. Try pasting a direct profile link instead.");
       setPhase("input");
     } catch {
       setError("Search failed. Try pasting a profile link instead.");
@@ -297,8 +298,8 @@ export function ProfileStep({ onSubmit, onSkip }: ProfileStepProps) {
           </h1>
 
           <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-            Share your background and we&apos;ll find the most impactful ways
-            for <em>you</em> to contribute to AI safety.
+            Share your name or public profile and we&apos;ll find the most
+            impactful ways for <em>you</em> to contribute to AI safety.
           </p>
         </motion.div>
 

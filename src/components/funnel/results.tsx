@@ -53,7 +53,7 @@ export function Results({ variant, answers }: ResultsProps) {
       setLocalGeo(geoData);
       identifyGeo(geoData.countryCode);
 
-      const hasProfile = !!answers.enrichedProfile || !!answers.profileUrl;
+      const hasProfile = !!answers.enrichedProfile || !!answers.profileUrl || !!answers.profileText;
       let merged: ResultItem[];
       let resultSource: "algorithmic" | "claude_personalized" = "algorithmic";
 

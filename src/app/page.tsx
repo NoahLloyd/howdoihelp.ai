@@ -74,7 +74,8 @@ export default function Home() {
   function handleProfileSubmit(
     url: string,
     platform: ProfilePlatform,
-    profile?: EnrichedProfile
+    profile?: EnrichedProfile,
+    profileText?: string,
   ) {
     trackProfileProvided(platform, variant);
     const newAnswers: UserAnswers = {
@@ -82,6 +83,7 @@ export default function Home() {
       profileUrl: url,
       profilePlatform: platform,
       ...(profile ? { enrichedProfile: profile } : {}),
+      ...(profileText ? { profileText } : {}),
     };
     setAnswers(newAnswers);
     sessionStorage.setItem("hdih_answers", JSON.stringify(newAnswers));

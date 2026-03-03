@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { scrapeLinkedInProfile } from "@/lib/linkedin-scraper";
+import { searchPerson } from "@/lib/perplexity";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,8 @@ export async function GET(req: Request) {
         photo: linkedinUser.picture,
         email: linkedinUser.email,
         headline: undefined as string | undefined,
+        summary: undefined as string | undefined,
+        currentCompany: undefined as string | undefined,
         skills: [] as string[],
         experience: [] as { title: string; company: string }[],
         education: [] as { school: string }[],
@@ -112,9 +115,32 @@ export async function GET(req: Request) {
       };
     }
 
-    // 6. Store in a short-lived cookie so the frontend can pick it up
+    // 6. Enrich with Perplexity web search — adds context from across the web
+    let perplexityText: string | undefined;
+    if (enrichedProfile.fullName) {
+      try {
+        const context = [enrichedProfile.headline, enrichedProfile.currentCompany]
+          .filter(Boolean)
+          .join(", ");
+        const query = context
+          ? `${enrichedProfile.fullName} — ${context}`
+          : enrichedProfile.fullName;
+        const { text } = await searchPerson(query);
+        if (text) {
+          perplexityText = text;
+          console.log("[linkedin-oauth] Perplexity enrichment added");
+        }
+      } catch {
+        console.log("[linkedin-oauth] Perplexity enrichment failed — continuing without it");
+      }
+    }
+
+    // 7. Store in a short-lived cookie so the frontend can pick it up
     const cookieStore = await cookies();
-    cookieStore.set("hdih_linkedin_profile", JSON.stringify(enrichedProfile), {
+    const cookieData = perplexityText
+      ? { ...enrichedProfile, perplexityText }
+      : enrichedProfile;
+    cookieStore.set("hdih_linkedin_profile", JSON.stringify(cookieData), {
       httpOnly: false, // Frontend needs to read this
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
