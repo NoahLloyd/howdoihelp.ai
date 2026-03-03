@@ -8,7 +8,7 @@ interface ResourceEditorProps {
   resource: Resource;
   isNew: boolean;
   onSave: (resource: Resource) => void;
-  onArchive?: (id: string) => void;
+  onDelete?: (id: string) => void;
   onCancel: () => void;
 }
 
@@ -29,9 +29,9 @@ function Tip({ text }: { text: string }) {
   );
 }
 
-export function ResourceEditor({ resource, isNew, onSave, onArchive, onCancel }: ResourceEditorProps) {
+export function ResourceEditor({ resource, isNew, onSave, onDelete, onCancel }: ResourceEditorProps) {
   const [form, setForm] = useState<Resource>({ ...resource });
-  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   function update<K extends keyof Resource>(key: K, value: Resource[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -350,20 +350,20 @@ export function ResourceEditor({ resource, isNew, onSave, onArchive, onCancel }:
           {/* Footer */}
           <div className="flex justify-between items-center px-6 py-4 border-t border-border">
             <div>
-              {!isNew && onArchive && (
-                showArchiveConfirm ? (
+              {!isNew && onDelete && (
+                showDeleteConfirm ? (
                   <div className="flex items-center gap-2 bg-red-500/10 p-2 rounded-lg border border-red-500/20">
-                     <span className="text-[11px] font-mono text-muted-foreground ml-1">Archive permanently?</span>
-                     <button type="button" onClick={() => onArchive(resource.id)} className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10 rounded cursor-pointer">Yes</button>
-                     <button type="button" onClick={() => setShowArchiveConfirm(false)} className="px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted border border-border rounded cursor-pointer">Cancel</button>
+                     <span className="text-[11px] font-mono text-muted-foreground ml-1">Delete permanently?</span>
+                     <button type="button" onClick={() => onDelete(resource.id)} className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10 rounded cursor-pointer">Yes</button>
+                     <button type="button" onClick={() => setShowDeleteConfirm(false)} className="px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted border border-border rounded cursor-pointer">Cancel</button>
                   </div>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setShowArchiveConfirm(true)}
+                    onClick={() => setShowDeleteConfirm(true)}
                     className="px-4 py-2 text-xs font-medium text-red-500 border border-red-500/20 rounded-md hover:bg-red-500/10 transition-colors cursor-pointer"
                   >
-                    Archive / Disable
+                    Delete
                   </button>
                 )
               )}

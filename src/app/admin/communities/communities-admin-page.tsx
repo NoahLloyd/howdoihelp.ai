@@ -7,6 +7,7 @@ import {
   fetchResourcesByCategory,
   toggleResourceEnabled,
   saveResource,
+  deleteResource,
   fetchCommunityCandidates,
   promoteCommunityCandidate,
   rejectCommunityCandidate,
@@ -252,7 +253,7 @@ export function CommunitiesAdminPage() {
           </button>
         </div>
         <Link
-          href="/admin/pipeline"
+          href="/admin/pipeline/communities"
           className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
           Pipeline &rarr;
@@ -557,18 +558,15 @@ export function CommunitiesAdminPage() {
           resource={editingResource}
           isNew={editingResource.id.startsWith("new-")}
           onSave={handleSave}
-          onArchive={async (id) => {
-              try {
-                if (editingResource) {
-                   const updated = { ...editingResource, enabled: false, status: "rejected" as const };
-                   await saveResource(updated);
-                   setResources(prev => prev.map(r => r.id === id ? updated : r));
-                   setEditingResource(null);
-                   showToast("Archived successfully");
-                }
-              } catch(err) {
-                showToast(err instanceof Error ? err.message : "Failed to archive", "error");
-              }
+          onDelete={async (id) => {
+            try {
+              await deleteResource(id);
+              setResources(prev => prev.filter(r => r.id !== id));
+              setEditingResource(null);
+              showToast("Deleted successfully");
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : "Failed to delete", "error");
+            }
           }}
           onCancel={() => setEditingResource(null)}
         />

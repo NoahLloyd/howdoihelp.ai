@@ -8,29 +8,30 @@ import {
   toggleResourceEnabled,
   saveResource,
   deleteResource,
-  fetchEventCandidates,
-  promoteCandidate,
-  rejectCandidate,
-  type EventCandidate,
+  fetchProgramCandidates,
+  promoteProgramCandidate,
+  rejectProgramCandidate,
+  type ProgramCandidate,
 } from "@/app/admin/actions";
 import { ResourceEditor } from "@/components/admin/resource-editor";
 
 const PAGE_SIZE = 50;
 
-type Tab = "events" | "candidates";
+type Tab = "programs" | "candidates";
 
-export function EventsAdminPage() {
-  const [tab, setTab] = useState<Tab>("events");
+export function ProgramsAdminPage() {
+  const [tab, setTab] = useState<Tab>("programs");
   const [resources, setResources] = useState<Resource[]>([]);
-  const [candidates, setCandidates] = useState<EventCandidate[]>([]);
+  const [candidates, setCandidates] = useState<ProgramCandidate[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Search & Filter state
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
-  const [timeFilter, setTimeFilter] = useState("upcoming");
-  const [sortField, setSortField] = useState<"date_asc" | "date_desc" | "ev_desc" | "title">("date_asc");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sortField, setSortField] = useState<"title" | "ev_desc" | "deadline" | "created">("title");
   const [candidateStatusFilter, setCandidateStatusFilter] = useState("all");
+  const [candidateTypeFilter, setCandidateTypeFilter] = useState("all");
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -42,7 +43,7 @@ export function EventsAdminPage() {
 
   const loadResources = useCallback(async () => {
     try {
-      const data = await fetchResourcesByCategory("events");
+      const data = await fetchResourcesByCategory("programs");
       setResources(data);
     } catch (err) {
       console.error(err);
@@ -51,7 +52,7 @@ export function EventsAdminPage() {
 
   const loadCandidates = useCallback(async () => {
     try {
-      const data = await fetchEventCandidates();
+      const data = await fetchProgramCandidates();
       setCandidates(data);
     } catch (err) {
       console.error(err);
@@ -95,10 +96,10 @@ export function EventsAdminPage() {
 
   async function handlePromote(id: string) {
     try {
-      await promoteCandidate(id);
+      await promoteProgramCandidate(id);
       setCandidates(prev => prev.map(c => c.id === id ? { ...c, status: "promoted" } : c));
-      showToast("Promoted to events");
-      loadResources(); // Refresh events list
+      showToast("Promoted to programs");
+      loadResources();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed", "error");
     }
@@ -106,7 +107,7 @@ export function EventsAdminPage() {
 
   async function handleRejectCandidate(id: string) {
     try {
-      await rejectCandidate(id);
+      await rejectProgramCandidate(id);
       setCandidates(prev => prev.map(c => c.id === id ? { ...c, status: "rejected" } : c));
       showToast("Candidate rejected");
     } catch (err) {
@@ -126,7 +127,8 @@ export function EventsAdminPage() {
       res = res.filter(r =>
         r.title.toLowerCase().includes(q) ||
         r.location.toLowerCase().includes(q) ||
-        (r.description || "").toLowerCase().includes(q)
+        (r.description || "").toLowerCase().includes(q) ||
+        (r.url || "").toLowerCase().includes(q)
       );
     }
 
@@ -134,48 +136,40 @@ export function EventsAdminPage() {
       res = res.filter(r => (r.source_org || "Unknown") === sourceFilter);
     }
 
-    if (timeFilter === "upcoming") {
-      res = res.filter(r => r.event_date && new Date(r.event_date) >= new Date(new Date().setHours(0, 0, 0, 0)));
-    } else if (timeFilter === "past") {
-      res = res.filter(r => r.event_date && new Date(r.event_date) < new Date(new Date().setHours(0, 0, 0, 0)));
-    }
-
     res.sort((a, b) => {
-      if (sortField === "date_asc") {
-        if (!a.event_date) return 1;
-        if (!b.event_date) return -1;
-        return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
-      }
-      if (sortField === "date_desc") {
-        if (!a.event_date) return 1;
-        if (!b.event_date) return -1;
-        return new Date(b.event_date).getTime() - new Date(a.event_date).getTime();
-      }
-      if (sortField === "ev_desc") return (b.ev_general ?? 0) - (a.ev_general ?? 0);
       if (sortField === "title") return a.title.localeCompare(b.title);
+      if (sortField === "ev_desc") return (b.ev_general ?? 0) - (a.ev_general ?? 0);
+      if (sortField === "deadline") {
+        if (!a.deadline_date) return 1;
+        if (!b.deadline_date) return -1;
+        return new Date(a.deadline_date).getTime() - new Date(b.deadline_date).getTime();
+      }
+      if (sortField === "created") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       return 0;
     });
 
     return res;
-  }, [resources, search, sourceFilter, timeFilter, sortField]);
+  }, [resources, search, sourceFilter, sortField]);
 
   const filteredCandidates = useMemo(() => {
     let res = candidates;
     if (candidateStatusFilter !== "all") {
       res = res.filter(c => c.status === candidateStatusFilter);
     }
+    if (candidateTypeFilter !== "all") {
+      res = res.filter(c => c.course_type === candidateTypeFilter);
+    }
     if (search) {
       const q = search.toLowerCase();
       res = res.filter(c =>
         c.title.toLowerCase().includes(q) ||
-        (c.location || "").toLowerCase().includes(q) ||
+        (c.description || "").toLowerCase().includes(q) ||
         (c.source || "").toLowerCase().includes(q)
       );
     }
     return res;
-  }, [candidates, candidateStatusFilter, search]);
+  }, [candidates, candidateStatusFilter, candidateTypeFilter, search]);
 
-  // Candidate counts
   const candidateCounts = useMemo(() => {
     const counts = { pending: 0, evaluated: 0, promoted: 0, rejected: 0 };
     for (const c of candidates) {
@@ -185,17 +179,16 @@ export function EventsAdminPage() {
   }, [candidates]);
 
   // Pagination
-  useEffect(() => { setPage(1); }, [search, sourceFilter, timeFilter, sortField, tab, candidateStatusFilter]);
-  const currentList = tab === "events" ? filtered : filteredCandidates;
-  const totalPages = Math.ceil(currentList.length / PAGE_SIZE);
-  const paged = tab === "events"
-    ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-    : filteredCandidates.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [search, sourceFilter, typeFilter, sortField, tab, candidateStatusFilter, candidateTypeFilter]);
+  const currentListLength = tab === "programs" ? filtered.length : filteredCandidates.length;
+  const totalPages = Math.ceil(currentListLength / PAGE_SIZE);
+  const pagedResources = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pagedCandidates = filteredCandidates.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   if (loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-background">
-        <div className="animate-pulse text-muted font-mono text-sm">Loading events timeline...</div>
+        <div className="animate-pulse text-muted font-mono text-sm">Loading programs...</div>
       </div>
     );
   }
@@ -204,8 +197,9 @@ export function EventsAdminPage() {
     <div className="min-h-dvh bg-background p-6 max-w-7xl mx-auto">
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded shadow-lg text-sm font-medium ${toast.type === "success" ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"
-          }`}>
+        <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded shadow-lg text-sm font-medium ${
+          toast.type === "success" ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"
+        }`}>
           {toast.message}
         </div>
       )}
@@ -215,18 +209,18 @@ export function EventsAdminPage() {
         <div>
           <Link href="/admin" className="text-xs font-mono text-muted hover:text-foreground mb-4 inline-block">&larr; Dashboard</Link>
           <div className="flex items-end gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">Events Pipeline</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Programs Pipeline</h1>
           </div>
         </div>
         <button
           onClick={() => setEditingResource({
             id: `new-${Date.now()}`, title: "", description: "", url: "", source_org: "Other",
-            category: "events", location: "Online", min_minutes: 60, ev_general: 0.5, friction: 0.2,
-            enabled: true, status: "approved", created_at: new Date().toISOString(), event_date: new Date().toISOString().split('T')[0]
+            category: "programs", location: "Online", min_minutes: 600, ev_general: 0.6, friction: 0.4,
+            enabled: true, status: "approved", created_at: new Date().toISOString()
           })}
           className="px-4 py-2 bg-foreground text-background text-sm font-medium rounded-md hover:opacity-90 transition-opacity cursor-pointer"
         >
-          + Add Event
+          + Add Program
         </button>
       </div>
 
@@ -234,16 +228,18 @@ export function EventsAdminPage() {
       <div className="flex items-center gap-4 mb-6">
         <div className="flex gap-1 bg-muted/20 rounded-lg p-1 w-fit">
           <button
-            onClick={() => setTab("events")}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${tab === "events" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
+            onClick={() => setTab("programs")}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
+              tab === "programs" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            Live Events <span className="text-xs font-mono text-muted ml-1">{filtered.length}</span>
+            Live Programs <span className="text-xs font-mono text-muted ml-1">{filtered.length}</span>
           </button>
           <button
             onClick={() => setTab("candidates")}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${tab === "candidates" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
+              tab === "candidates" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
           >
             Candidates
             {candidateCounts.pending + candidateCounts.evaluated > 0 && (
@@ -254,108 +250,92 @@ export function EventsAdminPage() {
           </button>
         </div>
         <Link
-          href="/admin/pipeline/events"
+          href="/admin/pipeline/programs"
           className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
           Pipeline &rarr;
         </Link>
       </div>
 
-      {/* ═══ EVENTS TAB ═══ */}
-      {tab === "events" && (
+      {/* ═══ PROGRAMS TAB ═══ */}
+      {tab === "programs" && (
         <>
-          {/* Controls Bar */}
           <div className="bg-card border border-border rounded-xl p-4 mb-6 space-y-4">
             <div className="flex gap-4 items-center">
               <div className="flex-1 relative">
                 <input
                   type="text"
-                  placeholder="Search event title, description, location..."
+                  placeholder="Search title, description, URL..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full pl-3 pr-3 py-2 bg-background border border-border rounded-lg text-sm focus:border-accent outline-none"
                 />
               </div>
               <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="py-2 px-3 bg-background border border-border rounded-lg text-sm">
-                <option value="all">All Orgs</option>
+                <option value="all">All Sources</option>
                 {sources.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value)} className="py-2 px-3 bg-background border border-border rounded-lg text-sm">
-                <option value="upcoming">Upcoming Events</option>
-                <option value="past">Past Events</option>
-                <option value="all">All Time</option>
-              </select>
               <select value={sortField} onChange={(e) => setSortField(e.target.value as any)} className="py-2 px-3 bg-background border border-border rounded-lg text-sm">
-                <option value="date_asc">Sort: Nearest Date</option>
-                <option value="date_desc">Sort: Furthest Date</option>
-                <option value="ev_desc">Sort: Highest Impact (EV)</option>
                 <option value="title">Sort: Title A-Z</option>
+                <option value="ev_desc">Sort: Highest Impact (EV)</option>
+                <option value="deadline">Sort: Nearest Deadline</option>
+                <option value="created">Sort: Newest Added</option>
               </select>
             </div>
           </div>
 
-          {/* Data Table */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-muted/30 text-xs font-mono text-muted-foreground uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3 font-medium">On</th>
-                    <th className="px-4 py-3 font-medium">Date</th>
-                    <th className="px-4 py-3 font-medium">Event Details</th>
-                    <th className="px-4 py-3 font-medium">Location</th>
+                    <th className="px-4 py-3 font-medium">Program</th>
+                    <th className="px-4 py-3 font-medium">Source</th>
+                    <th className="px-4 py-3 font-medium">Deadline</th>
                     <th className="px-4 py-3 font-medium text-right">Metrics</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {(paged as Resource[]).map(r => {
-                    const eventDate = r.event_date ? new Date(r.event_date) : null;
-                    const isPastEvent = eventDate ? new Date(new Date().setHours(0, 0, 0, 0)) > eventDate : false;
-
-                    return (
-                      <tr key={r.id} onClick={() => setEditingResource(r)} className={`hover:bg-muted/10 transition-colors cursor-pointer ${isPastEvent && timeFilter === 'all' ? 'opacity-50 grayscale' : ''}`}>
-                        <td className="px-4 py-3 w-10">
-                          <input
-                            type="checkbox"
-                            checked={r.enabled}
-                            onChange={(e) => handleToggle(r.id, e.target.checked)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="accent-accent w-4 h-4 cursor-pointer"
-                          />
-                        </td>
-                        <td className="px-4 py-3 w-32">
+                  {pagedResources.map(r => (
+                    <tr key={r.id} onClick={() => setEditingResource(r)} className="hover:bg-muted/10 transition-colors cursor-pointer">
+                      <td className="px-4 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          checked={r.enabled}
+                          onChange={(e) => handleToggle(r.id, e.target.checked)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="accent-accent w-4 h-4 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-4 py-3 min-w-[300px] max-w-[400px]">
+                        <div className="truncate font-medium text-foreground">{r.title}</div>
+                        <a href={r.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs text-muted font-mono hover:text-accent truncate block mt-0.5">
+                          {r.url?.replace(/^https?:\/\/(www\.)?/, "")}
+                        </a>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted w-32">{r.source_org}</td>
+                      <td className="px-4 py-3 w-32">
+                        {r.deadline_date ? (
                           <div className="font-mono text-sm tracking-tight text-foreground">
-                            {eventDate ? eventDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "TBD"}
+                            {new Date(r.deadline_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </div>
-                          <div className="text-[10px] uppercase font-mono text-muted tracking-wide mt-0.5">
-                            {isPastEvent ? "Passed" : "Upcoming"}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 min-w-[300px] max-w-[400px]">
-                          <div className="truncate font-medium text-foreground">{r.title}</div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] bg-muted/40 px-1.5 py-0.5 rounded text-muted-foreground uppercase tracking-wide font-medium">{r.source_org}</span>
-                            <a href={r.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs text-muted font-mono hover:text-accent truncate">
-                              {r.url?.replace(/^https?:\/\/(www\.)?/, "")}
-                            </a>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 w-40">
-                          <span className="text-xs bg-muted/30 px-2 py-1 rounded text-foreground">{r.location || "TBD"}</span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex flex-col items-end gap-0.5">
-                            <div className="text-[11px] font-mono"><span className="text-muted">EV:</span> {(r.ev_general || 0).toFixed(2)}</div>
-                            <div className="text-[10px] font-mono"><span className="text-muted">Friction:</span> {(r.friction || 0).toFixed(2)}</div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {paged.length === 0 && (
+                        ) : (
+                          <span className="text-xs text-muted">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex flex-col items-end gap-0.5">
+                          <div className="text-[11px] font-mono"><span className="text-muted">EV:</span> {(r.ev_general || 0).toFixed(2)}</div>
+                          <div className="text-[10px] font-mono"><span className="text-muted">Friction:</span> {(r.friction || 0).toFixed(2)}</div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {pagedResources.length === 0 && (
                     <tr>
                       <td colSpan={5} className="px-4 py-12 text-center text-muted font-mono text-sm">
-                        No events found matching filters.
+                        No programs found matching filters.
                       </td>
                     </tr>
                   )}
@@ -369,7 +349,6 @@ export function EventsAdminPage() {
       {/* ═══ CANDIDATES TAB ═══ */}
       {tab === "candidates" && (
         <>
-          {/* Controls */}
           <div className="bg-card border border-border rounded-xl p-4 mb-6">
             <div className="flex gap-4 items-center">
               <div className="flex-1 relative">
@@ -381,6 +360,12 @@ export function EventsAdminPage() {
                   className="w-full pl-3 pr-3 py-2 bg-background border border-border rounded-lg text-sm focus:border-accent outline-none"
                 />
               </div>
+              <select value={candidateTypeFilter} onChange={(e) => setCandidateTypeFilter(e.target.value)} className="py-2 px-3 bg-background border border-border rounded-lg text-sm">
+                <option value="all">All Types</option>
+                <option value="intensive">Intensive</option>
+                <option value="part-time">Part-time</option>
+                <option value="self-paced">Self-paced</option>
+              </select>
               <select value={candidateStatusFilter} onChange={(e) => setCandidateStatusFilter(e.target.value)} className="py-2 px-3 bg-background border border-border rounded-lg text-sm">
                 <option value="all">All Statuses ({candidates.length})</option>
                 <option value="pending">Pending ({candidateCounts.pending})</option>
@@ -391,56 +376,61 @@ export function EventsAdminPage() {
             </div>
           </div>
 
-          {/* Candidates List */}
           <div className="space-y-3">
-            {(paged as unknown as EventCandidate[]).map(c => (
+            {pagedCandidates.map(c => (
               <div key={c.id} className="bg-card border border-border rounded-xl overflow-hidden">
                 <div
                   className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-muted/5 transition-colors"
                   onClick={() => setExpandedCandidate(expandedCandidate === c.id ? null : c.id)}
                 >
-                  {/* Status badge */}
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${c.status === "pending" ? "bg-amber-400" :
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    c.status === "pending" ? "bg-amber-400" :
                     c.status === "evaluated" ? "bg-blue-400" :
-                      c.status === "promoted" ? "bg-emerald-400" :
-                        "bg-red-400"
-                    }`} />
+                    c.status === "promoted" ? "bg-emerald-400" : "bg-red-400"
+                  }`} />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm truncate">{c.title}</span>
-                      {c.ai_event_type && (
-                        <span className="text-[10px] bg-muted/40 px-1.5 py-0.5 rounded text-muted-foreground uppercase tracking-wide flex-shrink-0">{c.ai_event_type}</span>
+                      <span className="font-medium text-sm truncate">{c.ai_clean_title || c.title}</span>
+                      {c.course_type && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0 font-medium ${
+                          c.course_type === "intensive"
+                            ? "bg-violet-500/15 text-violet-400"
+                            : c.course_type === "part-time"
+                              ? "bg-blue-500/15 text-blue-400"
+                              : "bg-emerald-500/15 text-emerald-400"
+                        }`}>{c.course_type}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-muted">
-                      <span className="font-mono">{c.source}</span>
-                      {c.event_date && <span>{c.event_date}</span>}
-                      {c.location && <span>{c.location}</span>}
+                      <span className="font-mono">{c.source_org || c.source}</span>
+                      {c.date_range && <span>{c.date_range}</span>}
+                      {c.application_deadline && (
+                        <span>Deadline: {new Date(c.application_deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                      )}
                     </div>
                   </div>
 
-                  {/* AI scores */}
                   {c.ai_relevance_score != null && (
                     <div className="flex items-center gap-3 flex-shrink-0">
                       <div className="text-right">
                         <div className="text-[10px] font-mono text-muted">Relevance</div>
-                        <div className={`text-sm font-mono font-semibold ${c.ai_relevance_score >= 0.6 ? "text-emerald-500" :
-                          c.ai_relevance_score >= 0.3 ? "text-amber-500" : "text-red-500"
-                          }`}>
+                        <div className={`text-sm font-mono font-semibold ${
+                          c.ai_relevance_score >= 0.5 ? "text-emerald-500" :
+                          c.ai_relevance_score >= 0.2 ? "text-amber-500" : "text-red-500"
+                        }`}>
                           {c.ai_relevance_score.toFixed(2)}
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[10px] font-mono text-muted">Impact</div>
+                        <div className="text-[10px] font-mono text-muted">Quality</div>
                         <div className="text-sm font-mono font-semibold text-foreground">
-                          {(c.ai_impact_score || 0).toFixed(2)}
+                          {(c.ai_quality_score || 0).toFixed(2)}
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Actions */}
                   {(c.status === "pending" || c.status === "evaluated") && (
                     <div className="flex gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                       <button
@@ -458,16 +448,15 @@ export function EventsAdminPage() {
                     </div>
                   )}
 
-                  <span className={`text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded flex-shrink-0 ${c.status === "pending" ? "bg-amber-500/10 text-amber-500" :
+                  <span className={`text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded flex-shrink-0 ${
+                    c.status === "pending" ? "bg-amber-500/10 text-amber-500" :
                     c.status === "evaluated" ? "bg-blue-500/10 text-blue-500" :
-                      c.status === "promoted" ? "bg-emerald-500/10 text-emerald-500" :
-                        "bg-red-500/10 text-red-500"
-                    }`}>
+                    c.status === "promoted" ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+                  }`}>
                     {c.status}
                   </span>
                 </div>
 
-                {/* Expanded detail */}
                 {expandedCandidate === c.id && (
                   <div className="px-5 pb-4 border-t border-border/50 pt-3 space-y-3">
                     <div className="grid grid-cols-2 gap-4 text-xs">
@@ -481,17 +470,59 @@ export function EventsAdminPage() {
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-3 gap-4 text-xs">
+                      {c.course_type && (
+                        <div>
+                          <span className="text-muted font-mono block mb-1">Type</span>
+                          <span className="capitalize">{c.course_type}</span>
+                        </div>
+                      )}
+                      {c.duration_description && (
+                        <div>
+                          <span className="text-muted font-mono block mb-1">Duration</span>
+                          <span>{c.duration_description}</span>
+                        </div>
+                      )}
+                      {c.duration_hours && (
+                        <div>
+                          <span className="text-muted font-mono block mb-1">Total Hours</span>
+                          <span>{c.duration_hours}h</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 text-xs">
+                      {c.date_range && (
+                        <div>
+                          <span className="text-muted font-mono block mb-1">Date Range</span>
+                          <span>{c.date_range}</span>
+                        </div>
+                      )}
+                      {c.application_deadline && (
+                        <div>
+                          <span className="text-muted font-mono block mb-1">Application Deadline</span>
+                          <span>{new Date(c.application_deadline).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
+                        </div>
+                      )}
+                      {c.start_date && (
+                        <div>
+                          <span className="text-muted font-mono block mb-1">Start Date</span>
+                          <span>{new Date(c.start_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
+                        </div>
+                      )}
+                    </div>
+
                     {c.description && (
                       <div className="text-xs">
-                        <span className="text-muted font-mono block mb-1">Original Description</span>
+                        <span className="text-muted font-mono block mb-1">Description</span>
                         <p className="text-muted-foreground leading-relaxed">{c.description}</p>
                       </div>
                     )}
 
-                    {c.ai_summary && (
+                    {c.ai_clean_description && (
                       <div className="text-xs">
-                        <span className="text-muted font-mono block mb-1">AI Summary</span>
-                        <p className="text-foreground leading-relaxed">{c.ai_summary}</p>
+                        <span className="text-muted font-mono block mb-1">AI Description</span>
+                        <p className="text-foreground leading-relaxed">{c.ai_clean_description}</p>
                       </div>
                     )}
 
@@ -506,9 +537,13 @@ export function EventsAdminPage() {
                       <div className="flex gap-6 text-xs font-mono">
                         <div><span className="text-muted">Suggested EV:</span> {c.ai_suggested_ev.toFixed(2)}</div>
                         <div><span className="text-muted">Suggested Friction:</span> {(c.ai_suggested_friction || 0).toFixed(2)}</div>
-                        <div><span className="text-muted">Real Event:</span> {c.ai_is_real_event ? "Yes" : "No"}</div>
+                        <div><span className="text-muted">Real Program:</span> {c.ai_is_real_program ? "Yes" : "No"}</div>
                         <div><span className="text-muted">Relevant:</span> {c.ai_is_relevant ? "Yes" : "No"}</div>
                       </div>
+                    )}
+
+                    {c.duplicate_of && (
+                      <div className="text-xs font-mono text-amber-500">Duplicate of: {c.duplicate_of}</div>
                     )}
 
                     {c.processed_at && (
@@ -524,7 +559,7 @@ export function EventsAdminPage() {
 
             {filteredCandidates.length === 0 && (
               <div className="bg-card border border-border rounded-xl px-6 py-12 text-center text-muted font-mono text-sm">
-                No candidates found. Run the event pipeline to gather new events.
+                No candidates found. Run the programs pipeline to gather new programs.
               </div>
             )}
           </div>
@@ -535,7 +570,7 @@ export function EventsAdminPage() {
       {totalPages > 1 && (
         <div className="mt-4 px-4 py-3 bg-card border border-border rounded-xl flex items-center justify-between text-[11px] font-mono">
           <div className="text-muted">
-            Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, currentList.length)} of {currentList.length}
+            Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, currentListLength)} of {currentListLength}
           </div>
           <div className="flex gap-2">
             <button
