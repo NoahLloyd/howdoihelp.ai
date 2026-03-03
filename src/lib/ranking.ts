@@ -9,6 +9,7 @@ import {
   IntentTag,
   ResourceCategory,
   PositionTag,
+  ProfilePlatform,
 } from "@/types";
 
 // ─── Time Budgets ───────────────────────────────────────────
@@ -147,6 +148,24 @@ function positionFit(resource: Resource, positionType?: PositionTag): number {
   return 0.8;
 }
 
+// ─── Profile Platform → Position Tag mapping ────────────────
+
+const PROFILE_POSITION_HINTS: Partial<Record<ProfilePlatform, PositionTag>> = {
+  github: "ai_tech",
+  x: "audience_platform",
+  instagram: "audience_platform",
+  personal_website: "audience_platform",
+};
+
+function profileFit(resource: Resource, profilePlatform?: ProfilePlatform): number {
+  if (!profilePlatform) return 1.0;
+  const hintedPosition = PROFILE_POSITION_HINTS[profilePlatform];
+  if (!hintedPosition) return 1.0; // linkedin, facebook, other — no signal yet
+  const tags = resource.position_tags || [];
+  if (tags.includes(hintedPosition)) return 1.2;
+  return 1.0;
+}
+
 function activityFit(resource: Resource): number {
   // activity_score is 0–1, only set on communities/events from verification.
   // If not set, assume decent quality.
@@ -173,6 +192,7 @@ function scoreResource(
   const lf = locationFit(resource, geo);
   const pf = positionFit(resource, answers.positionType);
   const af = activityFit(resource);
+  const prof = profileFit(resource, answers.profilePlatform);
 
   // Hard kill: dead communities/events never show
   if (af === 0) return { resource, score: 0, matchReasons: [] };
@@ -185,7 +205,7 @@ function scoreResource(
   const frictionPenalty = 1 - resource.friction * FRICTION_SENSITIVITY[answers.time];
   const dl = deadlineBoost(resource);
 
-  const score = tf * tyf * lf * pf * af * ev * Math.max(frictionPenalty, 0.05) * dl;
+  const score = tf * tyf * lf * pf * af * prof * ev * Math.max(frictionPenalty, 0.05) * dl;
 
   const matchReasons: string[] = [];
   if (lf > 1.0) matchReasons.push("Near you");

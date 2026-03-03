@@ -6,10 +6,13 @@ import { questionPositioned, questionTwo } from "@/data/questions";
 import {
   trackQuestionAnswered,
   trackQuestionSkipped,
+  trackProfileProvided,
+  trackProfileSkipped,
 } from "@/lib/tracking";
 import { QuestionCard } from "@/components/questions/question-card";
+import { ProfileStep } from "@/components/funnel/profile-step";
 import { ProgressBar } from "@/components/ui/progress-bar";
-import type { Question, Variant, UserAnswers, IntentTag, PositionTag } from "@/types";
+import type { Question, Variant, UserAnswers, IntentTag, PositionTag, ProfilePlatform, EnrichedProfile } from "@/types";
 
 interface QuestionsProps {
   variant: Variant;
@@ -21,6 +24,7 @@ interface QuestionsProps {
 export function Questions({ variant, answers: initialAnswers, isPositioned, onComplete }: QuestionsProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<UserAnswers>(initialAnswers);
+  const [showProfileStep, setShowProfileStep] = useState(false);
   const answeredRef = useRef(false);
   const questionStartRef = useRef(Date.now());
 
@@ -52,6 +56,33 @@ export function Questions({ variant, answers: initialAnswers, isPositioned, onCo
     onComplete(updatedAnswers);
   }
 
+  /** For variant B, show the profile step instead of finishing immediately */
+  function finishOrProfile(updatedAnswers: UserAnswers) {
+    if (variant === "B") {
+      setAnswers(updatedAnswers);
+      sessionStorage.setItem("hdih_answers", JSON.stringify(updatedAnswers));
+      setShowProfileStep(true);
+    } else {
+      finish(updatedAnswers);
+    }
+  }
+
+  function handleProfileSubmit(url: string, platform: ProfilePlatform, profile?: EnrichedProfile) {
+    trackProfileProvided(platform, variant);
+    const updatedAnswers: UserAnswers = {
+      ...answers,
+      profileUrl: url,
+      profilePlatform: platform,
+      ...(profile ? { enrichedProfile: profile } : {}),
+    };
+    finish(updatedAnswers);
+  }
+
+  function handleProfileSkip() {
+    trackProfileSkipped(variant);
+    finish(answers);
+  }
+
   function handleSelect(questionId: string, optionId: string) {
     answeredRef.current = true;
     const timeToAnswer = Date.now() - questionStartRef.current;
@@ -66,7 +97,7 @@ export function Questions({ variant, answers: initialAnswers, isPositioned, onCo
       setAnswers(updatedAnswers);
 
       if (isLast) {
-        finish(updatedAnswers);
+        finishOrProfile(updatedAnswers);
       } else {
         sessionStorage.setItem("hdih_answers", JSON.stringify(updatedAnswers));
         setCurrentIndex((prev) => prev + 1);
@@ -77,7 +108,7 @@ export function Questions({ variant, answers: initialAnswers, isPositioned, onCo
       setAnswers(updatedAnswers);
 
       if (isLast) {
-        finish(updatedAnswers);
+        finishOrProfile(updatedAnswers);
       } else {
         setCurrentIndex((prev) => prev + 1);
       }
@@ -92,6 +123,15 @@ export function Questions({ variant, answers: initialAnswers, isPositioned, onCo
   }
 
   if (!currentQuestion) return null;
+
+  if (showProfileStep) {
+    return (
+      <ProfileStep
+        onSubmit={handleProfileSubmit}
+        onSkip={handleProfileSkip}
+      />
+    );
+  }
 
   return (
     <main className="flex min-h-dvh flex-col px-6 py-12">

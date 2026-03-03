@@ -21,6 +21,7 @@ export function PipelinePage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [autoScroll, setAutoScroll] = useState(true);
   const [evalUrl, setEvalUrl] = useState("");
+  const [communityEvalUrl, setCommunityEvalUrl] = useState("");
 
   const logRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -43,8 +44,24 @@ export function PipelinePage() {
     setLogs((prev) => [...prev, { time, text, type }]);
   }
 
+  // Scripts that call the Anthropic API and consume credits
+  const EXPENSIVE_SCRIPTS: Record<string, string> = {
+    "evaluate": "This will evaluate ALL pending event candidates using the Anthropic API. This can consume significant API credits.",
+    "sync-all": "This will gather events AND evaluate all pending candidates using the Anthropic API. This can consume significant API credits.",
+    "evaluate-community": "This will evaluate ALL pending community candidates using the Anthropic API. This can consume significant API credits.",
+    "sync-all-communities": "This will gather communities AND evaluate all pending candidates using the Anthropic API. This can consume significant API credits.",
+  };
+
   function runScript(scriptId: string, extraParams?: string) {
     if (activeScript) return;
+
+    // Warn before running expensive scripts (but not single-URL evaluations)
+    const isSingleEval = extraParams?.includes("url=");
+    if (EXPENSIVE_SCRIPTS[scriptId] && !isSingleEval) {
+      if (!window.confirm(`${EXPENSIVE_SCRIPTS[scriptId]}\n\nAre you sure you want to continue?`)) {
+        return;
+      }
+    }
 
     // Close any existing connection
     eventSourceRef.current?.close();
@@ -141,7 +158,7 @@ export function PipelinePage() {
         </Link>
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">
-            Event Pipeline
+            Pipeline
           </h1>
           <div className="flex items-center gap-4">
             {/* Mode toggle */}
@@ -180,12 +197,18 @@ export function PipelinePage() {
         </div>
         <p className="text-xs text-muted mt-1 font-mono">
           {mode === "dry-run"
-            ? "Dry run mode -- events are fetched and displayed but NOT inserted into the database"
-            : "Live mode -- events will be inserted into the candidates table"}
+            ? "Dry run mode — data is fetched and displayed but NOT inserted into the database"
+            : "Live mode — data will be inserted into the candidates tables"}
         </p>
       </div>
 
-      {/* Gatherer cards */}
+      {/* Event Pipeline */}
+      <h2 className="text-lg font-semibold tracking-tight mb-3">Event Pipeline</h2>
+      <p className="text-xs text-muted font-mono mb-3">
+        {mode === "dry-run"
+          ? "Dry run mode — events are fetched and displayed but NOT inserted into the database"
+          : "Live mode — events will be inserted into the candidates table"}
+      </p>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
         {GATHERERS.map((g) => {
           const status = statuses[g.id] || "idle";
@@ -327,6 +350,146 @@ export function PipelinePage() {
           >
             {activeScript === "sync-all" ? "Running..." : "Run All Gatherers"}
           </button>
+        </div>
+      </div>
+
+      {/* Community Pipeline */}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold tracking-tight mb-3">Community Pipeline</h2>
+        <p className="text-xs text-muted font-mono mb-3">
+          {mode === "dry-run"
+            ? "Dry run mode — communities are fetched and displayed but NOT inserted into the database"
+            : "Live mode — communities will be inserted into the candidates table"}
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          {/* Sync Communities (gatherer) */}
+          <div
+            className={`p-4 rounded-xl border transition-all duration-150 ${
+              activeScript === "sync-communities"
+                ? "bg-card border-amber-500/40 shadow-sm shadow-amber-500/10"
+                : "bg-card border-border hover:border-border/80"
+            }`}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Sync Communities</h3>
+                <p className="text-[11px] text-muted font-mono mt-0.5">
+                  EA Forum, LessWrong, PauseAI, AISafety.com
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`w-2 h-2 rounded-full ${statusColor(statuses["sync-communities"] || "idle")} ${
+                    activeScript === "sync-communities" ? "animate-pulse" : ""
+                  }`}
+                />
+                <span className="text-[10px] font-mono text-muted">
+                  {statusLabel(statuses["sync-communities"] || "idle")}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => runScript("sync-communities")}
+              disabled={!!activeScript}
+              className="w-full px-3 py-2 text-xs font-medium bg-foreground text-background rounded-md
+                hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {activeScript === "sync-communities" ? "Running..." : "Run"}
+            </button>
+          </div>
+
+          {/* Run All Communities */}
+          <div
+            className={`p-4 rounded-xl border transition-all duration-150 ${
+              activeScript === "sync-all-communities"
+                ? "bg-amber-500/5 border-amber-500/40 shadow-sm shadow-amber-500/10"
+                : "bg-card border-border hover:border-border/80"
+            }`}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Run All</h3>
+                <p className="text-[11px] text-muted font-mono mt-0.5">
+                  Full community pipeline
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`w-2 h-2 rounded-full ${statusColor(statuses["sync-all-communities"] || "idle")} ${
+                    activeScript === "sync-all-communities" ? "animate-pulse" : ""
+                  }`}
+                />
+                <span className="text-[10px] font-mono text-muted">
+                  {statusLabel(statuses["sync-all-communities"] || "idle")}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => runScript("sync-all-communities")}
+              disabled={!!activeScript}
+              className="w-full px-3 py-2 text-xs font-medium bg-foreground text-background rounded-md
+                hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {activeScript === "sync-all-communities" ? "Running..." : "Run Full Pipeline"}
+            </button>
+          </div>
+
+          {/* Community AI Evaluator */}
+          <div
+            className={`p-4 rounded-xl border transition-all duration-150 col-span-2 lg:col-span-3 ${
+              activeScript === "evaluate-community"
+                ? "bg-violet-500/5 border-violet-500/40 shadow-sm shadow-violet-500/10"
+                : "bg-card border-border hover:border-border/80"
+            }`}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Community AI Evaluator</h3>
+                <p className="text-[11px] text-muted font-mono mt-0.5">
+                  Claude evaluates, scores, and auto-promotes or rejects community candidates
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`w-2 h-2 rounded-full ${statusColor(statuses["evaluate-community"] || "idle")} ${
+                    activeScript === "evaluate-community" ? "animate-pulse" : ""
+                  }`}
+                />
+                <span className="text-[10px] font-mono text-muted">
+                  {statusLabel(statuses["evaluate-community"] || "idle")}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Paste a community URL to test a single evaluation..."
+                value={communityEvalUrl}
+                onChange={(e) => setCommunityEvalUrl(e.target.value)}
+                className="flex-1 px-3 py-2 text-xs bg-background border border-border rounded-md
+                  placeholder:text-muted focus:outline-none focus:border-accent/50"
+              />
+              <button
+                onClick={() => {
+                  if (!communityEvalUrl.trim()) return;
+                  runScript("evaluate-community", `&url=${encodeURIComponent(communityEvalUrl.trim())}`);
+                }}
+                disabled={!!activeScript || !communityEvalUrl.trim()}
+                className="px-4 py-2 text-xs font-medium bg-violet-500 text-white rounded-md
+                  hover:bg-violet-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
+              >
+                Test Single
+              </button>
+              <button
+                onClick={() => runScript("evaluate-community")}
+                disabled={!!activeScript}
+                className="px-4 py-2 text-xs font-medium bg-foreground text-background rounded-md
+                  hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
+              >
+                {activeScript === "evaluate-community" ? "Running..." : "Evaluate All"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

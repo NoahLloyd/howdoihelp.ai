@@ -8,7 +8,7 @@
  *   4. AISafety.com       (HTML scrape – ~200 communities)
  *
  * Then deduplicates by normalized URL (or name+location),
- * and upserts into the Supabase `resources` table.
+ * and inserts into the `community_candidates` staging table for AI evaluation.
  *
  * Usage:
  *   npx tsx scripts/sync-communities.ts              # live sync
@@ -19,6 +19,7 @@ import * as dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { createClient } from "@supabase/supabase-js";
+import { insertCommunityCandidates, type GatheredCommunity } from "./lib/insert-community-candidates";
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -292,123 +293,36 @@ function deduplicateCommunities(all: CommunityEntry[]): CommunityEntry[] {
   return Array.from(byUrl.values());
 }
 
-// ─── Upsert to Supabase ────────────────────────────────────
+// ─── Insert to community_candidates ─────────────────────────
 
 async function syncToDatabase(communities: CommunityEntry[]) {
-  console.log(`\n📦 Syncing ${communities.length} communities to database...`);
+  console.log(`\n📦 Inserting ${communities.length} communities into candidates table...`);
 
-  // Fetch existing synced resources
-  const { data: existing, error: fetchErr } = await supabase
-    .from("resources")
-    .select("id, source, source_id, url, title")
-    .eq("category", "communities")
-    .not("source", "eq", "manual");
-
-  if (fetchErr) {
-    console.error("❌ Failed to fetch existing resources:", fetchErr.message);
+  if (DRY_RUN) {
+    for (const comm of communities) {
+      console.log(`   ➕ CANDIDATE: "${comm.title}" (${comm.source}) — ${comm.url}`);
+    }
+    console.log(`\n✅ Dry run complete: ${communities.length} communities would be inserted as candidates.`);
     return;
   }
 
-  // Build maps for matching
-  const bySourceId = new Map<string, any>();
-  const byUrl = new Map<string, any>();
-  for (const row of existing || []) {
-    if (row.source_id) bySourceId.set(`${row.source}:${row.source_id}`, row);
-    if (row.url) byUrl.set(normalizeUrl(row.url), row);
-  }
+  // Convert CommunityEntry to GatheredCommunity format
+  const gathered: GatheredCommunity[] = communities.map((c) => ({
+    title: c.title,
+    description: c.description,
+    url: c.url,
+    source: c.source,
+    source_id: c.source_id,
+    source_org: c.source_org,
+    location: c.location,
+  }));
 
-  let inserted = 0;
-  let updated = 0;
-  let skipped = 0;
+  const result = await insertCommunityCandidates(gathered);
 
-  for (const comm of communities) {
-    const key = `${comm.source}:${comm.source_id}`;
-    const existingBySource = bySourceId.get(key);
-    const existingByUrl = byUrl.get(normalizeUrl(comm.url));
-    const match = existingBySource || existingByUrl;
-
-    if (match) {
-      // Check if anything meaningful changed
-      const changed =
-        match.title !== comm.title ||
-        normalizeUrl(match.url) !== normalizeUrl(comm.url);
-
-      if (changed) {
-        if (DRY_RUN) {
-          console.log(`   ✏️  UPDATE: "${match.title}" → "${comm.title}"`);
-        } else {
-          const { error } = await supabase
-            .from("resources")
-            .update({
-              title: comm.title,
-              description: comm.description,
-              url: comm.url,
-              source_org: comm.source_org,
-              location: comm.location,
-              source: comm.source,
-              source_id: comm.source_id,
-            })
-            .eq("id", match.id);
-
-          if (error) {
-            console.error(`   ❌ Failed to update "${comm.title}":`, error.message);
-          }
-        }
-        updated++;
-      } else {
-        skipped++;
-      }
-    } else {
-      // New community — insert
-      if (DRY_RUN) {
-        console.log(`   ➕ INSERT: "${comm.title}" (${comm.source}) — ${comm.url}`);
-      } else {
-        const id = `sync-${comm.source}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        const { error } = await supabase.from("resources").insert({
-          id,
-          title: comm.title,
-          description: comm.description,
-          url: comm.url,
-          source_org: comm.source_org,
-          category: "communities",
-          location: comm.location,
-          min_minutes: 5,
-          ev_general: 0.3,
-          friction: 0.1,
-          enabled: true,
-          status: "approved",
-          created_at: new Date().toISOString(),
-          source: comm.source,
-          source_id: comm.source_id,
-          background_tags: [],
-          position_tags: [],
-        });
-
-        if (error) {
-          console.error(`   ❌ Failed to insert "${comm.title}":`, error.message);
-        }
-      }
-      inserted++;
-    }
-  }
-
-  console.log(`\n✅ Sync complete${DRY_RUN ? " (DRY RUN)" : ""}:`);
-  console.log(`   ${inserted} new communities${DRY_RUN ? " would be" : ""} inserted`);
-  console.log(`   ${updated} communities${DRY_RUN ? " would be" : ""} updated`);
-  console.log(`   ${skipped} unchanged (skipped)`);
-
-  // Report communities that existed in DB but weren't found upstream
-  const upstreamKeys = new Set(communities.map((c) => `${c.source}:${c.source_id}`));
-  const stale = (existing || []).filter(
-    (row) => row.source_id && !upstreamKeys.has(`${row.source}:${row.source_id}`)
-  );
-  if (stale.length > 0) {
-    console.log(`   ⚠️  ${stale.length} resources in DB not found upstream (possibly stale):`);
-    for (const s of stale.slice(0, 10)) {
-      console.log(`      - "${s.title}" (${s.source})`);
-    }
-    if (stale.length > 10) console.log(`      ... and ${stale.length - 10} more`);
-  }
+  console.log(`\n✅ Sync complete:`);
+  console.log(`   ${result.inserted} new candidates inserted`);
+  console.log(`   ${result.skipped} duplicates skipped`);
+  console.log(`   ${result.errors} errors`);
 }
 
 // ─── Main ──────────────────────────────────────────────────
