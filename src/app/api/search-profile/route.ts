@@ -1,24 +1,39 @@
 import { NextResponse } from "next/server";
+import { searchPerson } from "@/lib/perplexity";
+import { getSupabase } from "@/lib/supabase";
 
 export async function POST(req: Request) {
   try {
     const { query } = await req.json();
 
     if (!query || typeof query !== "string" || query.trim().length < 2) {
-      return NextResponse.json({ url: null, error: "Query is required" }, { status: 400 });
+      return NextResponse.json({ text: null, error: "Query is required" }, { status: 400 });
     }
 
-    // TODO: Implement with Perplexity API
-    // const perplexityKey = process.env.PERPLEXITY_API_KEY;
-    // Prompt: "Find the most likely LinkedIn, GitHub, or X profile URL for: {query}.
-    //          Return only the single best-matching profile URL."
-    // Parse the response to extract a URL, then return { url }.
+    if (!process.env.PERPLEXITY_API_KEY) {
+      return NextResponse.json({
+        text: null,
+        message: "Profile search is not yet configured. Please paste a direct profile link.",
+      });
+    }
 
-    return NextResponse.json({
-      url: null,
-      message: "Profile search is not yet configured. Please paste a direct profile link.",
-    });
+    const { text, usage } = await searchPerson(query.trim());
+
+    // Log usage
+    const supabase = getSupabase();
+    if (supabase && usage.estimated_cost_usd) {
+      await supabase.from("api_usage").insert([usage]).then(() => {}, () => {});
+    }
+
+    if (!text) {
+      return NextResponse.json({
+        text: null,
+        message: "Couldn't find information about this person. Try pasting a direct profile link instead.",
+      });
+    }
+
+    return NextResponse.json({ text });
   } catch {
-    return NextResponse.json({ url: null, error: "Invalid request" }, { status: 400 });
+    return NextResponse.json({ text: null, error: "Invalid request" }, { status: 400 });
   }
 }

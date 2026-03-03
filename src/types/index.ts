@@ -42,6 +42,7 @@ export interface UserAnswers {
   profileUrl?: string;
   profilePlatform?: ProfilePlatform;
   enrichedProfile?: EnrichedProfile;
+  profileText?: string;
 }
 
 export interface GeoData {
@@ -197,7 +198,7 @@ export interface RecommendedResource {
 
 export interface ApiUsageEntry {
   id?: number;
-  provider: "claude" | "openai" | "github" | "scrape";
+  provider: "claude" | "openai" | "github" | "scrape" | "perplexity";
   model?: string;
   endpoint?: string;
   input_tokens?: number;

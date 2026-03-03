@@ -152,7 +152,11 @@ function buildUserPrompt(
 ): string {
   // Build profile section
   const profileLines: string[] = [];
-  if (profile) {
+
+  // If we have raw Perplexity text, use it directly — it's already a comprehensive overview
+  if (answers.profileText) {
+    profileLines.push(answers.profileText);
+  } else if (profile) {
     if (profile.fullName) profileLines.push(`Name: ${profile.fullName}`);
     if (profile.headline) profileLines.push(`Headline: ${profile.headline}`);
     if (profile.currentTitle && profile.currentCompany) {
@@ -193,8 +197,8 @@ function buildUserPrompt(
     profileLines.push(`Profile platform: ${profile.platform}`);
   }
   // Include profile URL from answers if available
-  if (answers.profileUrl) profileLines.push(`Profile URL: ${answers.profileUrl}`);
-  if (answers.profilePlatform && !profile) profileLines.push(`Profile platform: ${answers.profilePlatform}`);
+  if (answers.profileUrl && !answers.profileText) profileLines.push(`Profile URL: ${answers.profileUrl}`);
+  if (answers.profilePlatform && !profile && !answers.profileText) profileLines.push(`Profile platform: ${answers.profilePlatform}`);
   if (profileLines.length === 0) profileLines.push("No profile data available — personalize based on answers and location only.");
 
   // Build answers section
