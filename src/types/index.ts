@@ -30,10 +30,13 @@ export interface Question {
 
 export interface UserAnswers {
   time: TimeCommitment;
-  intents?: IntentTag[];    // Variant B (multi-select)
-  intent?: IntentTag;       // Variant D (single-select)
+  intents?: IntentTag[];    // Legacy (unused)
+  intent?: IntentTag;       // Single-select intent
   positioned?: boolean;     // True if user chose "uniquely positioned"
   positionType?: PositionTag; // What kind of position they have
+  profileUrl?: string;      // Optional public profile URL
+  profilePlatform?: ProfilePlatform; // Detected platform from profileUrl
+  enrichedProfile?: EnrichedProfile; // Full profile from enrichment API
 }
 
 export interface GeoData {
@@ -127,3 +130,86 @@ export type PositionTag =
   | "donor"
   | "student"
   | "other";
+
+// ─── Profile ────────────────────────────────────────────────
+
+export type ProfilePlatform =
+  | "linkedin"
+  | "github"
+  | "x"
+  | "instagram"
+  | "facebook"
+  | "personal_website"
+  | "other";
+
+// ─── Enriched Profile ───────────────────────────────────────
+
+export interface ProfileExperience {
+  title: string;
+  company: string;
+  startDate?: string;
+  endDate?: string;
+  description?: string;
+}
+
+export interface ProfileEducation {
+  school: string;
+  degree?: string;
+  field?: string;
+  startYear?: number;
+  endYear?: number;
+  description?: string;
+  activities?: string;
+}
+
+export interface ProfileRepo {
+  name: string;
+  description?: string;
+  stars: number;
+  language?: string;
+}
+
+export interface EnrichedProfile {
+  fullName?: string;
+  headline?: string;
+  currentTitle?: string;
+  currentCompany?: string;
+  location?: string;
+  photo?: string;
+  summary?: string;
+  skills: string[];
+  experience: ProfileExperience[];
+  education: ProfileEducation[];
+  platform: ProfilePlatform;
+  sourceUrl?: string;
+  linkedinUrl?: string;
+  email?: string;
+  // GitHub-specific
+  repos?: ProfileRepo[];
+  followers?: number;
+  // Metadata
+  fetchedAt: string;
+}
+
+// ─── Claude Recommendations ─────────────────────────────────
+
+export interface RecommendedResource {
+  resourceId: string;
+  rank: number;
+  description: string;  // Personalized 1-2 sentence description tailored to the user
+  title?: string;        // Optional custom title — omitted if default is fine
+}
+
+// ─── API Usage ──────────────────────────────────────────────
+
+export interface ApiUsageEntry {
+  id?: number;
+  provider: "claude" | "openai" | "github" | "scrape";
+  model?: string;
+  endpoint?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  estimated_cost_usd?: number;
+  user_id?: string;
+  created_at?: string;
+}

@@ -99,6 +99,12 @@ export default function AdminHub() {
             <span className="text-amber-500"> · {totalPending} pending review</span>
           )}
         </p>
+        <Link
+          href="/admin/costs"
+          className="mt-3 inline-block text-xs text-accent hover:underline"
+        >
+          View API costs →
+        </Link>
       </header>
 
       {/* Category cards */}

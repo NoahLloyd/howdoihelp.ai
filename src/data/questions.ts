@@ -59,33 +59,8 @@ export const questionPositioned: Question = {
 };
 
 /**
- * Variant B: urgency-based Q2
- */
-export const questionTwoB: Question = {
-  id: "intent",
-  question: "What's driving you right now?",
-  options: [
-    {
-      id: "understand",
-      label: "I just learned something alarming",
-    },
-    {
-      id: "connect",
-      label: "I feel alone in caring about this",
-    },
-    {
-      id: "impact",
-      label: "I'm ready to act, just tell me where",
-    },
-    {
-      id: "do_part",
-      label: "Someone I trust pointed me here",
-    },
-  ],
-};
-
-/**
- * Variant D: intent-based Q2
+ * Variants B and D: intent-based Q2
+ * Variant B also shows an optional profile link step after this.
  */
 export const questionTwoD: Question = {
   id: "intent",
@@ -118,7 +93,7 @@ export function getQuestionsForVariant(variant: Variant): Question[] {
     case "A":
       return [questionOne];
     case "B":
-      return [questionOne, questionTwoB];
+      return [questionOne, questionTwoD];
     case "D":
       return [questionOne, questionTwoD];
   }
