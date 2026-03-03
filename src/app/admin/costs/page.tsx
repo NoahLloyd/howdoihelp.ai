@@ -137,7 +137,9 @@ export default function CostsPage() {
             />
             <StatCard
               label="Avg cost/call"
-              value={`$${stats.totalRecommendations > 0 ? (stats.totalCost / stats.totalRecommendations).toFixed(4) : "0.0000"}`}
+              value={`$${stats.claudeBreakdown.length > 0
+                ? (stats.claudeBreakdown.reduce((s, c) => s + c.cost, 0) / stats.claudeBreakdown.reduce((s, c) => s + c.count, 0)).toFixed(4)
+                : "0.0000"}`}
             />
           </div>
 

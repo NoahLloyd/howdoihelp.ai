@@ -360,8 +360,9 @@ export async function fetchApiUsageStats(): Promise<ApiUsageStats> {
     providerMap.set(e.provider, p);
 
     // Claude breakdown
-    if (e.provider === "claude") {
-      totalRecommendations++;
+    if (e.provider === "claude" || e.provider === "openai") {
+      // Count recommendations by endpoint, not provider
+      if (e.endpoint === "messages.create") totalRecommendations++;
       const model = e.model || "unknown";
       const c = claudeMap.get(model) || { count: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
       c.count++;

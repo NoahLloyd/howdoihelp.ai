@@ -72,7 +72,7 @@ async function callClaude(
     messages: [{ role: "user", content: userContent }],
   });
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const text = response.content?.[0]?.type === "text" ? response.content[0].text : "";
   const inputTokens = response.usage?.input_tokens || 0;
   const outputTokens = response.usage?.output_tokens || 0;
   const estimatedCost =

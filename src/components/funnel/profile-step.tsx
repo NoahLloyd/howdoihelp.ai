@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { detectPlatform } from "@/lib/profile";
 import { ProfileConfirmation } from "@/components/funnel/profile-confirmation";
@@ -137,6 +137,13 @@ export function ProfileStep({ onSubmit, onSkip }: ProfileStepProps) {
   const [error, setError] = useState<string | null>(null);
   const [loadingText, setLoadingText] = useState("Looking up your profile...");
   const autoSubmitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up auto-submit timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSubmitTimer.current) clearTimeout(autoSubmitTimer.current);
+    };
+  }, []);
 
   const inputMode = detectInputMode(input);
 

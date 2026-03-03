@@ -141,7 +141,7 @@ export function Results({ variant, answers }: ResultsProps) {
         (r) => !pickedIds.has(r.id) && (r.category === "events" || r.category === "communities")
       );
       if (remainingLocal.length > 0) {
-        const localCard = buildLocalCard(remainingLocal, userAnswers, geoData, "A");
+        const localCard = buildLocalCard(remainingLocal, userAnswers, geoData, variant);
         if (localCard) {
           // Insert after Claude's picked event/community, or at the end
           const eventIdx = items.findIndex(

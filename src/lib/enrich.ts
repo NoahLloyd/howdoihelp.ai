@@ -169,6 +169,27 @@ export async function githubLookup(url: string): Promise<{
   }
 }
 
+// ─── SSRF Protection ────────────────────────────────────────
+
+/** Block private/internal IPs to prevent SSRF */
+function isPrivateUrl(urlStr: string): boolean {
+  try {
+    const hostname = new URL(urlStr).hostname.toLowerCase();
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]" ||
+      hostname === "0.0.0.0" ||
+      hostname === "169.254.169.254" ||
+      hostname.endsWith(".internal") ||
+      hostname.endsWith(".local") ||
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+      /^192\.168\./.test(hostname)
+    );
+  } catch { return true; }
+}
+
 // ─── Best-Effort Fetch (Other Platforms) ─────────────────────
 
 export async function bestEffortFetch(url: string): Promise<{
@@ -179,6 +200,9 @@ export async function bestEffortFetch(url: string): Promise<{
 
   try {
     const normalized = url.match(/^https?:\/\//) ? url : `https://${url}`;
+    if (isPrivateUrl(normalized)) {
+      return { profile: null, usage: { provider: "scrape", endpoint: url, estimated_cost_usd: 0 } };
+    }
     const res = await fetch(normalized, {
       signal: AbortSignal.timeout(10_000),
       headers: {

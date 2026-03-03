@@ -26,8 +26,7 @@ create policy "users_public_read" on users
 create policy "users_public_insert" on users
   for insert with check (true);
 
-create policy "users_public_update" on users
-  for update using (true);
+-- No public update policy — updates happen server-side via service role (bypasses RLS)
 
 -- API Usage: track every external API call for cost monitoring.
 create table if not exists api_usage (
@@ -37,20 +36,17 @@ create table if not exists api_usage (
   endpoint text,
   input_tokens int,
   output_tokens int,
-  estimated_cost_usd real,
+  estimated_cost_usd numeric,
   user_id text references users(id),
   created_at timestamptz not null default now()
 );
 
 alter table api_usage enable row level security;
 
--- Only service role can insert (server-side API routes)
 -- Public can read for admin dashboard (auth checked in app layer)
+-- No insert policy — inserts happen server-side via service role (bypasses RLS)
 create policy "api_usage_public_read" on api_usage
   for select using (true);
-
-create policy "api_usage_service_insert" on api_usage
-  for insert with check (true);
 
 -- Indexes
 create index idx_api_usage_provider on api_usage(provider);
