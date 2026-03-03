@@ -1,5 +1,5 @@
 import { posthog } from "./posthog";
-import type { Variant, TimeCommitment, IntentTag, PositionTag } from "@/types";
+import type { Variant, TimeCommitment, IntentTag, PositionTag, ProfilePlatform } from "@/types";
 
 /**
  * Track a pageview with the current URL and optional properties.
@@ -102,6 +102,20 @@ export function trackStackExpanded(variant: Variant, extraCount: number) {
  */
 export function identifyVariant(variant: Variant) {
   posthog.register({ variant });
+}
+
+/**
+ * User provided a profile link on the optional profile step.
+ */
+export function trackProfileProvided(platform: ProfilePlatform, variant: Variant) {
+  posthog.capture("profile_provided", { platform, variant });
+}
+
+/**
+ * User skipped the optional profile step.
+ */
+export function trackProfileSkipped(variant: Variant) {
+  posthog.capture("profile_skipped", { variant });
 }
 
 /**

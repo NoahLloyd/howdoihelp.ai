@@ -287,3 +287,129 @@ export async function rejectCandidate(id: string): Promise<void> {
     .eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+// ─── API Usage / Cost Stats ────────────────────────────────
+
+export interface ApiUsageStats {
+  totalCost: number;
+  last7DaysCost: number;
+  last24hCost: number;
+  byProvider: { provider: string; count: number; cost: number }[];
+  claudeBreakdown: {
+    model: string;
+    count: number;
+    inputTokens: number;
+    outputTokens: number;
+    cost: number;
+    avgInputTokens: number;
+    avgOutputTokens: number;
+    avgCostPerCall: number;
+  }[];
+  totalEnrichments: number;
+  totalRecommendations: number;
+  claudeTotalTokens: number;
+  claudeTotalInputTokens: number;
+  claudeTotalOutputTokens: number;
+  recentEntries: {
+    provider: string;
+    model: string | null;
+    endpoint: string | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    estimated_cost_usd: number | null;
+    created_at: string;
+  }[];
+}
+
+export async function fetchApiUsageStats(): Promise<ApiUsageStats> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+
+  const { data: rows, error } = await supabase
+    .from("api_usage")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(1000);
+
+  if (error) throw new Error(error.message);
+  const entries = rows || [];
+
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+
+  let totalCost = 0;
+  let last7DaysCost = 0;
+  let last24hCost = 0;
+  const providerMap = new Map<string, { count: number; cost: number }>();
+  const claudeMap = new Map<string, { count: number; inputTokens: number; outputTokens: number; cost: number }>();
+  let totalEnrichments = 0;
+  let totalRecommendations = 0;
+
+  for (const e of entries) {
+    const cost = e.estimated_cost_usd || 0;
+    const age = now - new Date(e.created_at).getTime();
+
+    totalCost += cost;
+    if (age < 7 * day) last7DaysCost += cost;
+    if (age < day) last24hCost += cost;
+
+    // By provider
+    const p = providerMap.get(e.provider) || { count: 0, cost: 0 };
+    p.count++;
+    p.cost += cost;
+    providerMap.set(e.provider, p);
+
+    // Claude breakdown
+    if (e.provider === "claude") {
+      totalRecommendations++;
+      const model = e.model || "unknown";
+      const c = claudeMap.get(model) || { count: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
+      c.count++;
+      c.inputTokens += e.input_tokens || 0;
+      c.outputTokens += e.output_tokens || 0;
+      c.cost += cost;
+      claudeMap.set(model, c);
+    }
+
+    // Enrichments
+    if (["github", "scrape"].includes(e.provider)) {
+      totalEnrichments++;
+    }
+  }
+
+  // Compute Claude totals
+  let claudeTotalInputTokens = 0;
+  let claudeTotalOutputTokens = 0;
+  for (const c of claudeMap.values()) {
+    claudeTotalInputTokens += c.inputTokens;
+    claudeTotalOutputTokens += c.outputTokens;
+  }
+
+  return {
+    totalCost,
+    last7DaysCost,
+    last24hCost,
+    byProvider: [...providerMap.entries()].map(([provider, v]) => ({ provider, ...v })),
+    claudeBreakdown: [...claudeMap.entries()].map(([model, v]) => ({
+      model,
+      ...v,
+      avgInputTokens: v.count > 0 ? Math.round(v.inputTokens / v.count) : 0,
+      avgOutputTokens: v.count > 0 ? Math.round(v.outputTokens / v.count) : 0,
+      avgCostPerCall: v.count > 0 ? v.cost / v.count : 0,
+    })),
+    totalEnrichments,
+    totalRecommendations,
+    claudeTotalTokens: claudeTotalInputTokens + claudeTotalOutputTokens,
+    claudeTotalInputTokens,
+    claudeTotalOutputTokens,
+    recentEntries: entries.slice(0, 50).map((e) => ({
+      provider: e.provider,
+      model: e.model,
+      endpoint: e.endpoint,
+      input_tokens: e.input_tokens,
+      output_tokens: e.output_tokens,
+      estimated_cost_usd: e.estimated_cost_usd,
+      created_at: e.created_at,
+    })),
+  };
+}

@@ -7,6 +7,8 @@ interface ResourceCardProps {
   scored: ScoredResource;
   variant: Variant;
   isPrimary?: boolean;
+  customTitle?: string;
+  customDescription?: string;
   onClickTrack?: (resourceId: string) => void;
 }
 
@@ -14,6 +16,8 @@ export function ResourceCard({
   scored,
   variant,
   isPrimary = false,
+  customTitle,
+  customDescription,
   onClickTrack,
 }: ResourceCardProps) {
   const { resource } = scored;
@@ -37,7 +41,7 @@ export function ResourceCard({
           isPrimary ? "text-xl" : "text-base"
         }`}
       >
-        {resource.title}
+        {customTitle || resource.title}
       </h3>
 
       {/* Description */}
@@ -46,7 +50,7 @@ export function ResourceCard({
           isPrimary ? "text-base leading-relaxed" : "text-sm"
         }`}
       >
-        {resource.description}
+        {customDescription || resource.description}
       </p>
 
       {/* Event date + location */}
