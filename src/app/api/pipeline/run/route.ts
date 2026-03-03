@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { spawn } from "child_process";
 
 const SCRIPT_MAP: Record<string, string> = {
+  // Event pipeline
   "gather-aisafety": "scripts/gatherers/gather-aisafety.ts",
   "gather-ea-lesswrong": "scripts/gatherers/gather-ea-lesswrong.ts",
   "gather-eventbrite": "scripts/gatherers/gather-eventbrite.ts",
@@ -9,6 +10,10 @@ const SCRIPT_MAP: Record<string, string> = {
   "gather-meetup": "scripts/gatherers/gather-meetup.ts",
   "evaluate": "scripts/evaluate-event.ts",
   "sync-all": "scripts/sync-all-events.ts",
+  // Community pipeline
+  "sync-communities": "scripts/sync-communities.ts",
+  "evaluate-community": "scripts/evaluate-community.ts",
+  "sync-all-communities": "scripts/sync-all-communities.ts",
 };
 
 export const dynamic = "force-dynamic";
@@ -33,15 +38,32 @@ export async function GET(req: Request) {
   const args = ["tsx", scriptPath];
 
   // For individual gatherers, add --dry-run in dry-run mode
-  if (mode === "dry-run" && scriptId !== "sync-all" && scriptId !== "evaluate") {
+  if (mode === "dry-run" && scriptId !== "sync-all" && scriptId !== "evaluate" && scriptId !== "sync-all-communities" && scriptId !== "evaluate-community") {
     args.push("--dry-run");
   }
   // For sync-all in dry-run mode, skip evaluate phase
   if (mode === "dry-run" && scriptId === "sync-all") {
     args.push("--skip-evaluate");
   }
-  // Evaluator: single URL or full queue
+  // For sync-all-communities in dry-run mode, skip evaluate phase
+  if (mode === "dry-run" && scriptId === "sync-all-communities") {
+    args.push("--skip-evaluate");
+  }
+  // For sync-communities gatherer, add --dry-run
+  if (mode === "dry-run" && scriptId === "sync-communities") {
+    args.push("--dry-run");
+  }
+  // Event evaluator: single URL or full queue
   if (scriptId === "evaluate") {
+    const evalUrl = searchParams.get("url");
+    if (evalUrl) {
+      args.push("--url", evalUrl);
+    } else {
+      args.push("--process-queue");
+    }
+  }
+  // Community evaluator: single URL or full queue
+  if (scriptId === "evaluate-community") {
     const evalUrl = searchParams.get("url");
     if (evalUrl) {
       args.push("--url", evalUrl);

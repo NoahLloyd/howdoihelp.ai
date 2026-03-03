@@ -287,3 +287,116 @@ export async function rejectCandidate(id: string): Promise<void> {
     .eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+// ─── Community Candidates ─────────────────────────────────
+
+export interface CommunityCandidate {
+  id: string;
+  title: string;
+  description: string | null;
+  url: string;
+  source: string;
+  source_id: string | null;
+  source_org: string | null;
+  location: string | null;
+  submitted_by: string | null;
+  scraped_text: string | null;
+  ai_is_real_community: boolean | null;
+  ai_is_relevant: boolean | null;
+  ai_relevance_score: number | null;
+  ai_quality_score: number | null;
+  ai_suggested_ev: number | null;
+  ai_suggested_friction: number | null;
+  ai_community_type: string | null;
+  ai_clean_title: string | null;
+  ai_clean_description: string | null;
+  ai_clean_location: string | null;
+  ai_is_online: boolean | null;
+  ai_organization: string | null;
+  ai_reasoning: string | null;
+  duplicate_of: string | null;
+  status: string;
+  processed_at: string | null;
+  promoted_at: string | null;
+  promoted_resource_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchCommunityCandidates(
+  status?: string
+): Promise<CommunityCandidate[]> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+
+  let query = supabase
+    .from("community_candidates")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data as CommunityCandidate[]) || [];
+}
+
+export async function promoteCommunityCandidate(id: string): Promise<void> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+
+  const { data: candidate, error: fetchErr } = await supabase
+    .from("community_candidates")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (fetchErr || !candidate) throw new Error("Candidate not found");
+
+  const resourceId = `eval-comm-${candidate.source}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+  const { error: insertErr } = await supabase.from("resources").insert({
+    id: resourceId,
+    title: candidate.ai_clean_title || candidate.title,
+    description: candidate.ai_clean_description || candidate.description || "",
+    url: candidate.url,
+    source_org: candidate.ai_organization || candidate.source_org || candidate.source,
+    category: "communities",
+    location: candidate.ai_clean_location || candidate.location || "Global",
+    min_minutes: 5,
+    ev_general: candidate.ai_suggested_ev || 0.3,
+    friction: candidate.ai_suggested_friction || 0.1,
+    enabled: true,
+    status: "approved",
+    activity_score: candidate.ai_quality_score || 0.5,
+    url_status: "reachable",
+    source: candidate.source,
+    source_id: candidate.source_id,
+    created_at: new Date().toISOString(),
+  });
+
+  if (insertErr) throw new Error(insertErr.message);
+
+  const { error: updateErr } = await supabase
+    .from("community_candidates")
+    .update({
+      status: "promoted",
+      promoted_at: new Date().toISOString(),
+      promoted_resource_id: resourceId,
+    })
+    .eq("id", id);
+
+  if (updateErr) throw new Error(updateErr.message);
+}
+
+export async function rejectCommunityCandidate(id: string): Promise<void> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+  const { error } = await supabase
+    .from("community_candidates")
+    .update({ status: "rejected" })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
