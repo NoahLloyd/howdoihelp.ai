@@ -53,10 +53,20 @@ export function ResourceCard({
         {customDescription || resource.description}
       </p>
 
-      {/* Event date + location */}
-      {(resource.event_date || (resource.location && resource.location !== "Global" && resource.location !== "Online")) && (
+      {/* Date + location: show deadline if present (replaces event date), otherwise event date */}
+      {(resource.deadline_date || resource.event_date || (resource.location && resource.location !== "Global" && resource.location !== "Online")) && (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {resource.event_date && (
+          {resource.deadline_date ? (
+            <span className="font-medium">
+              Deadline:{" "}
+              {new Date(resource.deadline_date).toLocaleDateString("en-US", {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                timeZone: "UTC",
+              })}
+            </span>
+          ) : resource.event_date ? (
             <span className="font-medium">
               {new Date(resource.event_date).toLocaleDateString("en-US", {
                 weekday: "short",
@@ -65,23 +75,10 @@ export function ResourceCard({
                 timeZone: "UTC",
               })}
             </span>
-          )}
+          ) : null}
           {resource.location && resource.location !== "Global" && resource.location !== "Online" && (
             <span>{resource.location}</span>
           )}
-        </div>
-      )}
-
-      {/* Deadline */}
-      {resource.deadline_date && (
-        <div className="mt-2">
-          <span className="text-xs font-medium text-amber-500">
-            Deadline:{" "}
-            {new Date(resource.deadline_date).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })}
-          </span>
         </div>
       )}
 

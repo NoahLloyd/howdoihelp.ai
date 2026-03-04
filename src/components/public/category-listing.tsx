@@ -111,7 +111,19 @@ export function CategoryListing({ category, resources }: CategoryListingProps) {
                         <span>📍 {resource.location}</span>
                       </>
                     )}
-                    {resource.event_date && (
+                    {resource.deadline_date ? (
+                      <>
+                        <span className="text-border">·</span>
+                        <span>
+                          Deadline:{" "}
+                          {new Date(resource.deadline_date).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </>
+                    ) : resource.event_date ? (
                       <>
                         <span className="text-border">·</span>
                         <span>
@@ -123,19 +135,7 @@ export function CategoryListing({ category, resources }: CategoryListingProps) {
                           })}
                         </span>
                       </>
-                    )}
-                    {resource.deadline_date && (
-                      <>
-                        <span className="text-border">·</span>
-                        <span className="text-amber-500">
-                          Due{" "}
-                          {new Date(resource.deadline_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </span>
-                      </>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <span className="text-muted group-hover:text-accent transition-colors text-sm shrink-0 mt-0.5">

@@ -76,8 +76,8 @@ You must return ONLY a valid JSON object with these exact fields:
   "suggested_ev": number,         // 0.0-1.0: Suggested expected-value ranking score
   "suggested_friction": number,   // 0.0-1.0: How hard is it to attend (0=one click, 1=major commitment)
   "event_type": string,           // See event_type options below
-  "clean_title": string,          // Cleaned up, human-readable event title
-  "clean_description": string,    // 1-2 sentence description suitable for a directory listing
+  "clean_title": string,          // Cleaned up, human-readable event title. Never use em dashes.
+  "clean_description": string,    // 1-2 sentence description suitable for a directory listing. Never use em dashes.
   "event_date": string | null,    // Start date in ISO format (YYYY-MM-DD). Always extract this if possible.
   "event_end_date": string | null, // End date in ISO format (YYYY-MM-DD) if multi-day, otherwise null
   "event_time": string | null,    // Start time in "HH:MM" 24h format with timezone, e.g. "18:00 GMT", "14:00 PST". null if unknown.

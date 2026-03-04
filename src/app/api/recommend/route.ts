@@ -56,7 +56,9 @@ Write a personalized description (1 sentence, sometimes 2) that is heavily inspi
 ### title (optional)
 Only include a "title" field if you think a custom title would be more compelling for this specific user than the existing one. Otherwise, omit "title" entirely and the existing title will be used. For example, you might customize a generic title like "AI Safety Newsletter" to "Weekly AI Safety Digest for Engineers" for a software engineer.
 
-IMPORTANT: Write in second person ("you", "your"). Be specific — reference their actual job title, company, skills, or background. Never be generic.`;
+IMPORTANT: Write in second person ("you", "your"). Be specific and reference their actual job title, company, skills, or background. Never be generic.
+
+IMPORTANT: Never use em dashes in titles or descriptions. Use commas, periods, or semicolons instead.`;
 
 // ─── Request Handler ─────────────────────────────────────────
 

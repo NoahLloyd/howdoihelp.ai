@@ -46,6 +46,12 @@ const OTHER_PATH_MAP: Record<string, PathId> = {
   "fli-asset-pack": "quick",
   "aisafety-media": "learn",
   "aisafety-field-map": "learn",
+  "80k-explore-careers": "learn",
+  "aisafety-com-explore": "learn",
+  "aisafety-info-learn": "learn",
+  "adolescence-of-technology": "learn",
+  "ai-2027": "learn",
+  "preparing-intelligence-explosion": "learn",
   "1-on-1-conversation": "connect",
   "talk-to-people": "connect",
   "controlai-legislators": "act",
@@ -288,8 +294,8 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
   if (loading) {
     return (
       <main className="flex min-h-dvh items-center justify-center">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-muted-foreground">
-          Loading...
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+          <span className="shimmer text-muted-foreground/70 text-sm">Loading</span>
         </motion.div>
       </main>
     );
@@ -705,10 +711,21 @@ function ConnectExplorer({ resources, variant, geo, onClickTrack, onLocationChan
 
       {/* Location context */}
       {locationFilter === "near" && geo && (
-        <div className="flex items-center text-xs text-muted-foreground">
-          <span>Showing results near</span>
-          <LocationPicker geo={geo} onLocationChange={onLocationChange} />
-        </div>
+        geo.country === "Unknown" && !geo.city ? (
+          <div className="flex flex-col gap-2 rounded-lg border border-accent/20 bg-accent/5 p-3">
+            <p className="text-xs text-muted-foreground">
+              We couldn&apos;t detect your location. Enter your city to see nearby results:
+            </p>
+            <div className="flex items-center text-xs text-muted-foreground">
+              <LocationPicker geo={geo} onLocationChange={onLocationChange} autoOpen />
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center text-xs text-muted-foreground">
+            <span>Showing results near</span>
+            <LocationPicker geo={geo} onLocationChange={onLocationChange} />
+          </div>
+        )
       )}
 
       {/* Count */}

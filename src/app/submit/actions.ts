@@ -100,6 +100,28 @@ export async function submitResource(input: SubmitResourceInput): Promise<void> 
     return;
   }
 
+  // Programs go to the program candidates pipeline for AI evaluation
+  if (input.category === "programs") {
+    const id = `cand-prog-submission-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const row = {
+      id,
+      title: input.title.trim(),
+      description: (input.description || "").trim(),
+      url: input.url.trim(),
+      source: "submission",
+      source_id: id,
+      source_org: (input.source_org || "").trim() || null,
+      location: (input.location || "Online").trim(),
+      submitted_by: input.submitted_by.trim(),
+      status: "pending",
+    };
+
+    const { error } = await supabase.from("program_candidates").insert(row);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
   // Other resources go directly to the resources table as before
   const id = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 

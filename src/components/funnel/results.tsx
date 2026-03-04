@@ -285,9 +285,8 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="text-muted-foreground"
         >
-          Finding the best ways you can help...
+          <span className="shimmer text-muted-foreground/70 text-sm">Finding the best ways you can help</span>
         </motion.div>
       </main>
     );

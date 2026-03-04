@@ -7,11 +7,14 @@ import type { GeoData } from "@/types";
 interface LocationPickerProps {
   geo: GeoData;
   onLocationChange: (geo: GeoData) => void;
+  /** Auto-open the editor on mount (used when geo detection fails) */
+  autoOpen?: boolean;
 }
 
 /** Inline clickable location that opens a popover editor */
-export function LocationPicker({ geo, onLocationChange }: LocationPickerProps) {
+export function LocationPicker({ geo, onLocationChange, autoOpen }: LocationPickerProps) {
   const [open, setOpen] = useState(false);
+  const autoOpenedRef = useRef(false);
   const [value, setValue] = useState("");
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -24,6 +27,14 @@ export function LocationPicker({ geo, onLocationChange }: LocationPickerProps) {
     : geo.country !== "Unknown"
       ? geo.country
       : "your area";
+
+  // Auto-open when geo detection fails
+  useEffect(() => {
+    if (autoOpen && !autoOpenedRef.current) {
+      autoOpenedRef.current = true;
+      setOpen(true);
+    }
+  }, [autoOpen]);
 
   // Focus input when opening
   useEffect(() => {

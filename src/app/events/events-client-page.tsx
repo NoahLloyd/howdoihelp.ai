@@ -187,8 +187,8 @@ export function EventsClientPage({ resources }: EventsClientPageProps) {
                        {/* Placeholders */}
                        {loadingGeo && localEvents.length === 0 && onlineEvents.length === 0 && otherEvents.length === 0 && (
                            <tr>
-                               <td colSpan={5} className="px-6 py-12 text-center text-muted font-mono animate-pulse">
-                                   Acquiring location data...
+                               <td colSpan={5} className="px-6 py-12 text-center font-mono">
+                                   <span className="shimmer text-muted/70">Acquiring location data</span>
                                </td>
                            </tr>
                        )}

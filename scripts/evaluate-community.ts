@@ -71,8 +71,8 @@ You must return ONLY a valid JSON object with these exact fields:
   "suggested_ev": number,             // 0.0-1.0: Overall expected value of listing this community
   "suggested_friction": number,       // 0.0-1.0: How hard is it to join (0=one click, 1=application+selective)
   "community_type": string,           // See community_type options below
-  "clean_title": string,              // Cleaned up, human-readable community name
-  "clean_description": string,        // 1-2 sentence description suitable for a directory listing. Be specific about what the community does and who it's for.
+  "clean_title": string,              // Cleaned up, human-readable community name. Never use em dashes.
+  "clean_description": string,        // 1-2 sentence description suitable for a directory listing. Be specific about what the community does and who it's for. Never use em dashes.
   "clean_location": string,           // Standardized: "City, Country" for local groups, or "Online" for virtual communities
   "is_online": boolean,               // true if this is a purely online/virtual community, false if it has in-person meetups
   "organization": string,             // The parent organization, e.g. "EA Forum", "PauseAI", "LessWrong". Use the most recognizable name.

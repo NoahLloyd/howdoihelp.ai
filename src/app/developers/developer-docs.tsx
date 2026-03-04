@@ -271,7 +271,7 @@ function ApiPlayground() {
           className="p-4 text-sm font-mono text-neutral-200 overflow-x-auto max-h-96 overflow-y-auto leading-relaxed"
         >
           {loading ? (
-            <span className="text-neutral-500 animate-pulse">Loading...</span>
+            <span className="shimmer text-neutral-500/70">Loading</span>
           ) : response ? (
             response
           ) : (
