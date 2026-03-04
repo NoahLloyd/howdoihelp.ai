@@ -112,11 +112,7 @@ export default function Home() {
 
   function handleProfileSkip() {
     trackProfileSkipped(variant);
-    const newAnswers: UserAnswers = { time: "significant" };
-    setAnswers(newAnswers);
-    sessionStorage.setItem("hdih_answers", JSON.stringify(newAnswers));
-    sessionStorage.setItem("hdih_variant", variant);
-    goTo("results");
+    handleVariantChange("B");
   }
 
   // ─── Variant C: Q1 answer handler ────────────────────────

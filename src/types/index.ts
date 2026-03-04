@@ -115,6 +115,7 @@ export interface LocalCard {
   anchor: ScoredResource;
   extras: ScoredResource[];
   score: number;
+  anchorDescription?: string;
 }
 
 // ─── Positioned Person ──────────────────────────────────────
