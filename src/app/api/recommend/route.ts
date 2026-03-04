@@ -33,10 +33,11 @@ Your job is to rank the resources from most to least relevant FOR THIS SPECIFIC 
 ## Output Rules
 
 1. **Return exactly 4 to 6 items.** Not more, not less. Pick the absolute best matches for this person.
-2. **At most 1 event or community.** Events (category "events") and communities (category "communities") are displayed in a special grouped card in the UI — you pick the single best one (if any), and all other nearby events/communities auto-populate beneath it. So you must NEVER include more than one event or community in your output.
-   - The event/community will usually NOT be the #1 recommendation. Typically the top pick is a course, career resource, or action that's a great skill match. The event/community might be rank 3, 4, or 5.
+2. **At most 1 event or community — often zero.** Events (category "events") and communities (category "communities") are displayed in a special grouped card in the UI — you pick the single best one (if any), and all other nearby events/communities auto-populate beneath it. So you must NEVER include more than one event or community in your output.
+   - For many users — especially those deeper into AI safety, technical contributors, or people with significant time — a fellowship, course, or career resource is far more impactful than an event. In these cases, include ZERO events/communities.
+   - Only include an event/community when it's a genuinely strong match (e.g. a nearby conference in their exact field, or someone new to the space who would benefit from connecting with others).
+   - When you do include one, it will usually NOT be the #1 recommendation. Typically the top pick is a course, career resource, or action that's a great skill match. The event/community might be rank 3, 4, or 5.
    - Only rank an event/community as #1 if it's exceptionally relevant — e.g. a nearby conference perfectly aligned with their field.
-   - It's also fine to include zero events/communities if none are a strong match. The local card will still show nearby ones automatically.
 3. **No markdown.** Return ONLY a valid JSON array. No \`\`\`json fences, no explanation.
 
 ## Output Format

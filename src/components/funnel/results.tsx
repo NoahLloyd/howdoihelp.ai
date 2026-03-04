@@ -48,11 +48,12 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
   const startTimeRef = useRef(Date.now());
 
   // When precomputed items are provided, find the local card index
+  // and fetch resources for location change support
   useEffect(() => {
-    if (precomputedItems) {
-      const idx = precomputedItems.findIndex((item) => item.kind === "local");
-      localCardIndexRef.current = idx >= 0 ? idx : null;
-    }
+    if (!precomputedItems) return;
+    const idx = precomputedItems.findIndex((item) => item.kind === "local");
+    localCardIndexRef.current = idx >= 0 ? idx : null;
+    fetchResources().then(setAllResources);
   }, [precomputedItems]);
 
   useEffect(() => {
@@ -133,11 +134,23 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
       const data = await res.json();
       const recs: RecommendedResource[] = data.recommendations || [];
 
-      // Map recommendations back to scored resources
+      // Separate event/community from other recommendations
       const merged: ResultItem[] = [];
+      let eventCommunityRec: RecommendedResource | null = null;
+      let eventCommunityResource: Resource | null = null;
+
       for (const rec of recs) {
         const resource = resources.find((r) => r.id === rec.resourceId);
         if (!resource) continue;
+
+        if (resource.category === "events" || resource.category === "communities") {
+          if (!eventCommunityRec) {
+            eventCommunityRec = rec;
+            eventCommunityResource = resource;
+          }
+          continue;
+        }
+
         merged.push({
           kind: "resource",
           scored: { resource, score: 1 / rec.rank, matchReasons: [] },
@@ -145,12 +158,27 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
         });
       }
 
-      // Add local card
-      const localCard = buildLocalCard(resources, userAnswers, geoData, variant);
-      if (localCard) {
-        localCardIndexRef.current = merged.length;
-        merged.push({ kind: "local", card: localCard });
+      // Build local card with Claude's chosen event/community as anchor
+      const algorithmicLocalCard = buildLocalCard(resources, userAnswers, geoData, variant);
+
+      if (eventCommunityRec && eventCommunityResource) {
+        const anchor: ScoredResource = {
+          resource: eventCommunityResource,
+          score: 1 / eventCommunityRec.rank,
+          matchReasons: [],
+        };
+        const extras = algorithmicLocalCard
+          ? [algorithmicLocalCard.anchor, ...algorithmicLocalCard.extras]
+              .filter(s => s.resource.id !== eventCommunityResource!.id)
+          : [];
+        const localIdx = Math.min(eventCommunityRec.rank - 1, merged.length);
+        localCardIndexRef.current = localIdx;
+        merged.splice(localIdx, 0, {
+          kind: "local",
+          card: { anchor, extras, score: anchor.score, anchorDescription: eventCommunityRec.description },
+        });
       }
+      // When Claude doesn't recommend an event/community, don't show the local card at all
 
       return merged.length > 0
         ? merged
@@ -441,6 +469,7 @@ function LocalCardGroup({ card, variant, geo, onClickTrack, onLocationChange }: 
       <ResourceCard
         scored={card.anchor}
         variant={variant}
+        customDescription={card.anchorDescription}
         onClickTrack={onClickTrack}
       />
 

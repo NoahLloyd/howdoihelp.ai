@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-shimmer";
 
 /*
   Light/dark mode — follows device preference via prefers-color-scheme.

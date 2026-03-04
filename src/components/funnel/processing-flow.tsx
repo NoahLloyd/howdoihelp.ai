@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Search, FileText, Sparkles, User, Lock } from "lucide-react";
 import { fetchResources } from "@/lib/data";
 import { rankResources, buildLocalCard } from "@/lib/ranking";
 import { getGeoData } from "@/lib/geo";
@@ -46,10 +47,13 @@ function stripMarkdown(text: string): string {
     .trim();
 }
 
+/** Common section headers from Perplexity output that aren't useful as snippets */
+const GENERIC_HEADERS = /^(personal\s+background|background|overview|summary|introduction|about|biography|bio|professional\s+background|career|education|experience|skills|key\s+(highlights|facts|information|details|points)|early\s+life|notable\s+(achievements|work)|achievements)$/i;
+
 /** Extract snippet lines from Perplexity text, preferring bullet-list content */
 function extractSnippetLines(text: string, maxItems = 4): string[] {
   const cleaned = stripMarkdown(text);
-  const lines = cleaned.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+  const lines = cleaned.split("\n").map((l) => l.trim()).filter((l) => l.length > 0 && !GENERIC_HEADERS.test(l));
 
   // Find the first cluster of short lines (bullet-list-style content)
   for (let i = 0; i < lines.length; i++) {
@@ -164,6 +168,103 @@ function buildDetailTags(profile: EnrichedProfile): string[] {
   return tags.slice(0, 6); // Max 6 tags
 }
 
+// ─── Visual Step Components ──────────────────────────────────
+
+/** Status text with a shimmer sweep animation (powered by tw-shimmer) */
+function ShimmerText({ children }: { children: string }) {
+  return <span className="shimmer text-muted-foreground/70">{children}</span>;
+}
+
+/** Mini browser address bar shown while fetching a profile URL */
+function FetchingUrlBar({ url }: { url: string }) {
+  let host: string;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    host = url;
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      transition={{ duration: 0.35 }}
+      className="mb-6 w-full max-w-sm"
+    >
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="flex items-center gap-2 px-3 py-2">
+          <Lock className="h-3 w-3 shrink-0 text-muted" strokeWidth={2} />
+          <span className="truncate text-xs text-muted-foreground">{host}</span>
+        </div>
+        <div className="h-0.5 bg-border">
+          <motion.div
+            className="h-full bg-accent/60"
+            initial={{ width: "0%" }}
+            animate={{ width: "85%" }}
+            transition={{ duration: 3, ease: "easeOut" }}
+          />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/** Search engine bar shown while searching for a person online */
+function SearchQueryBar({ query }: { query: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      transition={{ duration: 0.35 }}
+      className="mb-6 w-full max-w-sm"
+    >
+      <div className="flex items-center gap-2.5 rounded-full border border-border bg-card px-4 py-2.5">
+        <Search className="h-3.5 w-3.5 shrink-0 text-muted" strokeWidth={2} />
+        <span className="truncate text-sm text-muted-foreground">{query}</span>
+        <div className="ml-auto flex items-center gap-[3px]">
+          {[0, 1, 2].map((i) => (
+            <motion.div
+              key={i}
+              className="h-1 w-1 rounded-full bg-accent"
+              animate={{ opacity: [0.25, 1, 0.25], scale: [0.8, 1, 0.8] }}
+              transition={{ duration: 1, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
+            />
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/** Animated icon with orbiting ring for steps without a richer visual */
+function StepIcon({ statusText }: { statusText: string }) {
+  const Icon = statusText.includes("Building")
+    ? Sparkles
+    : statusText.includes("Reading") || statusText.includes("Analyzing")
+      ? FileText
+      : User;
+
+  return (
+    <div className="relative flex h-10 w-10 items-center justify-center">
+      {/* Orbiting ring */}
+      <motion.div
+        className="absolute inset-0 rounded-full border border-accent/20"
+        animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+      />
+      {/* Inner glow */}
+      <motion.div
+        className="absolute inset-1 rounded-full bg-accent/5"
+        animate={{ opacity: [0.3, 0.8, 0.3] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <Icon className="relative h-5 w-5 text-accent" strokeWidth={1.5} />
+    </div>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────
 
 export function ProcessingFlow({
@@ -188,6 +289,20 @@ export function ProcessingFlow({
 
   const hasRun = useRef(false);
   const startTimeRef = useRef(Date.now());
+  const searchQueryRef = useRef("");
+  const lastViewChangeRef = useRef(Date.now());
+
+  /** Enforce minimum dwell time before transitioning to the next view.
+   *  Prevents any state from flashing by too quickly. */
+  const MIN_STEP_MS = 2000;
+  async function showView(next: ViewState) {
+    const elapsed = Date.now() - lastViewChangeRef.current;
+    if (elapsed < MIN_STEP_MS) {
+      await minWait(MIN_STEP_MS - elapsed);
+    }
+    lastViewChangeRef.current = Date.now();
+    setView(next);
+  }
 
   useEffect(() => {
     if (hasRun.current) return;
@@ -206,6 +321,61 @@ export function ProcessingFlow({
     // Start fetching resources + geo in background immediately
     const bgFetch = Promise.all([fetchResources(), getGeoData()]);
 
+    // ─── Scrape + Search helper (shared by GitHub, X, Instagram, other URL) ───
+
+    async function scrapeAndSearch(
+      scrapeUrl: string,
+      fallbackQuery: string,
+    ) {
+      // Step 1: Scrape for profile data
+      try {
+        const res = await fetch("/api/scrape-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: scrapeUrl }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.profile) {
+            enrichedProfile = data.profile;
+            const details = buildDetailTags(data.profile);
+            await showView({
+              statusText: "Analyzing your background...",
+              profile: data.profile,
+              details: details.length > 0 ? details : undefined,
+            });
+          }
+        }
+      } catch { /* continue */ }
+
+      // Step 2: Perplexity search
+      const query = enrichedProfile?.fullName
+        ? buildSearchQuery(enrichedProfile)
+        : fallbackQuery;
+      searchQueryRef.current = query;
+      await showView({ statusText: "Searching online..." });
+
+      try {
+        const searchRes = await fetch("/api/search-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query }),
+        });
+        if (searchRes.ok) {
+          const data = await searchRes.json();
+          if (data.text) {
+            rawProfileText = data.text;
+            searchCitations = data.citations ?? [];
+            await showView({
+              statusText: "Building your personalized plan...",
+              citations: searchCitations,
+              snippetLines: extractSnippetLines(data.text),
+            });
+          }
+        }
+      } catch { /* continue */ }
+    }
+
     // ─── LinkedIn Flow ──────────────────────────────────
 
     if (inputType === "linkedin") {
@@ -220,7 +390,7 @@ export function ProcessingFlow({
           const data = await res.json();
           if (data.profile) {
             enrichedProfile = data.profile;
-            setView({
+            await showView({
               statusText: "Analyzing your background...",
               profile: data.profile,
             });
@@ -228,68 +398,53 @@ export function ProcessingFlow({
         }
       } catch { /* continue */ }
 
-      // Step 2: Full enrichment (Claude extraction) — run alongside a min delay
-      const [enrichResult] = await Promise.all([
-        fetch("/api/enrich", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: input }),
-        }).then(async (res) => {
-          if (res.ok) {
-            const data = await res.json();
-            return data.profile as EnrichedProfile | null;
-          }
-          return null;
-        }).catch(() => null),
-        minWait(2500), // Let the profile card breathe
-      ]);
+      // Step 2: Full enrichment (Claude extraction)
+      const enrichResult = await fetch("/api/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: input }),
+      }).then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          return data.profile as EnrichedProfile | null;
+        }
+        return null;
+      }).catch(() => null);
 
       if (enrichResult) {
         enrichedProfile = enrichResult;
-        // Show enrichment details (skills, experience tags)
         const details = buildDetailTags(enrichResult);
         if (details.length > 0) {
-          setView((prev) => ({
-            ...prev,
+          await showView({
+            statusText: "Analyzing your background...",
             profile: enrichResult,
             details,
-            statusText: `Searching for more about ${enrichResult.fullName || "you"}...`,
-          }));
-          await minWait(2000); // Let them read the details
+          });
         }
       }
 
-      // Step 3: Perplexity search — richer query with more context
+      // Step 3: Perplexity search
       if (enrichedProfile?.fullName) {
         const query = buildSearchQuery(enrichedProfile);
-
-        setView((prev) => ({
-          ...prev,
-          statusText: `Searching for more about ${enrichedProfile!.fullName}...`,
-        }));
+        searchQueryRef.current = query;
+        await showView({ statusText: "Searching online..." });
 
         try {
-          const [searchRes] = await Promise.all([
-            fetch("/api/search-profile", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query }),
-            }),
-            minWait(1500),
-          ]);
-
+          const searchRes = await fetch("/api/search-profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query }),
+          });
           if (searchRes.ok) {
             const data = await searchRes.json();
             if (data.text) {
               rawProfileText = data.text;
               searchCitations = data.citations ?? [];
-              // Transition: hide profile/details, show search results
-              setView({
-                statusText: "Reading through what we found...",
+              await showView({
+                statusText: "Building your personalized plan...",
                 citations: searchCitations,
                 snippetLines: extractSnippetLines(data.text),
               });
-              await minWait(2000);
             }
           }
         } catch { /* continue */ }
@@ -298,175 +453,33 @@ export function ProcessingFlow({
     // ─── GitHub Flow ────────────────────────────────────
 
     } else if (inputType === "github") {
-      try {
-        const [scrapeRes] = await Promise.all([
-          fetch("/api/scrape-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: input }),
-          }),
-          minWait(1000),
-        ]);
-        if (scrapeRes.ok) {
-          const data = await scrapeRes.json();
-          if (data.profile) {
-            enrichedProfile = data.profile;
-            const details = buildDetailTags(data.profile);
-            setView({
-              statusText: "Searching for more about you...",
-              profile: data.profile,
-              details: details.length > 0 ? details : undefined,
-            });
-          }
-        }
-      } catch { /* continue */ }
-
-      // Step 2: Perplexity search for richer context
-      const searchQuery = enrichedProfile?.fullName
-        ? buildSearchQuery(enrichedProfile)
-        : input.replace(/^https?:\/\/(www\.)?github\.com\//, "").replace(/[/?#].*$/, "");
-
-      try {
-        const [searchRes] = await Promise.all([
-          fetch("/api/search-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: searchQuery }),
-          }),
-          minWait(2000), // Let profile + repos breathe
-        ]);
-        if (searchRes.ok) {
-          const data = await searchRes.json();
-          if (data.text) {
-            rawProfileText = data.text;
-            searchCitations = data.citations ?? [];
-            // Transition: hide profile/details, show search results
-            setView({
-              statusText: "Reading through what we found...",
-              citations: searchCitations,
-              snippetLines: extractSnippetLines(data.text),
-            });
-            await minWait(2000);
-          }
-        }
-      } catch { /* continue */ }
+      await scrapeAndSearch(
+        input,
+        input.replace(/^https?:\/\/(www\.)?github\.com\//, "").replace(/[/?#].*$/, ""),
+      );
 
     // ─── X (Twitter) Flow ────────────────────────────────
 
     } else if (inputType === "x") {
-      // Step 1: Quick scrape for OG tags
-      try {
-        const [scrapeRes] = await Promise.all([
-          fetch("/api/scrape-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: input }),
-          }),
-          minWait(1000),
-        ]);
-        if (scrapeRes.ok) {
-          const data = await scrapeRes.json();
-          if (data.profile) {
-            enrichedProfile = data.profile;
-            setView({
-              statusText: "Searching for more about you...",
-              profile: data.profile,
-            });
-          }
-        }
-      } catch { /* continue */ }
-
-      // Step 2: Perplexity search with richer context
-      const searchQuery = enrichedProfile?.fullName
-        ? buildSearchQuery(enrichedProfile)
-        : input.replace(/^https?:\/\/(x\.com|twitter\.com)\//, "").replace(/[/?#].*$/, "");
-
-      try {
-        const [searchRes] = await Promise.all([
-          fetch("/api/search-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: searchQuery }),
-          }),
-          minWait(1500),
-        ]);
-        if (searchRes.ok) {
-          const data = await searchRes.json();
-          if (data.text) {
-            rawProfileText = data.text;
-            searchCitations = data.citations ?? [];
-            // Transition: hide profile, show search results
-            setView({
-              statusText: "Reading through what we found...",
-              citations: searchCitations,
-              snippetLines: extractSnippetLines(data.text),
-            });
-            await minWait(2000);
-          }
-        }
-      } catch { /* continue */ }
+      await scrapeAndSearch(
+        input,
+        input.replace(/^https?:\/\/(x\.com|twitter\.com)\//, "").replace(/[/?#].*$/, ""),
+      );
 
     // ─── Instagram Flow ──────────────────────────────────
 
     } else if (inputType === "instagram") {
-      // Step 1: Quick scrape for OG tags
-      try {
-        const [scrapeRes] = await Promise.all([
-          fetch("/api/scrape-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: input }),
-          }),
-          minWait(1000),
-        ]);
-        if (scrapeRes.ok) {
-          const data = await scrapeRes.json();
-          if (data.profile) {
-            enrichedProfile = data.profile;
-            setView({
-              statusText: "Searching for more about you...",
-              profile: data.profile,
-            });
-          }
-        }
-      } catch { /* continue */ }
-
-      // Step 2: Perplexity search with richer context
-      const searchQuery = enrichedProfile?.fullName
-        ? buildSearchQuery(enrichedProfile)
-        : input.replace(/^https?:\/\/(www\.)?instagram\.com\//, "").replace(/[/?#].*$/, "");
-
-      try {
-        const [searchRes] = await Promise.all([
-          fetch("/api/search-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: searchQuery }),
-          }),
-          minWait(1500),
-        ]);
-        if (searchRes.ok) {
-          const data = await searchRes.json();
-          if (data.text) {
-            rawProfileText = data.text;
-            searchCitations = data.citations ?? [];
-            // Transition: hide profile, show search results
-            setView({
-              statusText: "Reading through what we found...",
-              citations: searchCitations,
-              snippetLines: extractSnippetLines(data.text),
-            });
-            await minWait(2000);
-          }
-        }
-      } catch { /* continue */ }
+      await scrapeAndSearch(
+        input,
+        input.replace(/^https?:\/\/(www\.)?instagram\.com\//, "").replace(/[/?#].*$/, ""),
+      );
 
     // ─── Name Search Flow ───────────────────────────────
 
     } else if (inputType === "name") {
+      searchQueryRef.current = input;
       if (rawProfileText) {
-        // Already have text — just show it
-        setView({
+        await showView({
           statusText: "Building your personalized plan...",
           snippetLines: extractSnippetLines(rawProfileText),
         });
@@ -482,12 +495,11 @@ export function ProcessingFlow({
             if (data.text) {
               rawProfileText = data.text;
               searchCitations = data.citations ?? [];
-              setView({
-                statusText: "Reading through what we found...",
+              await showView({
+                statusText: "Building your personalized plan...",
                 citations: searchCitations,
                 snippetLines: extractSnippetLines(data.text),
               });
-              await minWait(2500); // Let them see the sources
             }
           }
         } catch { /* continue */ }
@@ -496,57 +508,18 @@ export function ProcessingFlow({
     // ─── Other URL Flow ─────────────────────────────────
 
     } else {
-      try {
-        const res = await fetch("/api/scrape-profile", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: input }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.profile) {
-            enrichedProfile = data.profile;
-            if (data.profile.fullName) {
-              setView({
-                statusText: "Searching for more about you...",
-                profile: data.profile,
-              });
-            }
-          }
-        }
-      } catch { /* continue */ }
-
-      // Try Perplexity if we got a name from the scrape
-      if (enrichedProfile?.fullName) {
-        const query = buildSearchQuery(enrichedProfile);
-        try {
-          const [searchRes] = await Promise.all([
-            fetch("/api/search-profile", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query }),
-            }),
-            minWait(1500),
-          ]);
-          if (searchRes.ok) {
-            const data = await searchRes.json();
-            if (data.text) {
-              rawProfileText = data.text;
-              searchCitations = data.citations ?? [];
-              setView({
-                statusText: "Reading through what we found...",
-                citations: searchCitations,
-                snippetLines: extractSnippetLines(data.text),
-              });
-              await minWait(2000);
-            }
-          }
-        } catch { /* continue */ }
-      }
+      await scrapeAndSearch(input, input);
     }
 
     // ─── Fetch resources + geo (likely already done) ────
 
+    // Enforce minimum dwell on the last view before moving on
+    const elapsed = Date.now() - lastViewChangeRef.current;
+    if (elapsed < MIN_STEP_MS) {
+      await minWait(MIN_STEP_MS - elapsed);
+    }
+
+    // Ensure we're showing "Building..." during recommendation generation
     setView((prev) => ({
       ...prev,
       statusText: "Building your personalized plan...",
@@ -628,10 +601,23 @@ export function ProcessingFlow({
       const data = await res.json();
       const recs: RecommendedResource[] = data.recommendations || [];
 
+      // Separate event/community from other recommendations
       const merged: ResultItem[] = [];
+      let eventCommunityRec: RecommendedResource | null = null;
+      let eventCommunityResource: Resource | null = null;
+
       for (const rec of recs) {
         const resource = resources.find((r) => r.id === rec.resourceId);
         if (!resource) continue;
+
+        if (resource.category === "events" || resource.category === "communities") {
+          if (!eventCommunityRec) {
+            eventCommunityRec = rec;
+            eventCommunityResource = resource;
+          }
+          continue;
+        }
+
         merged.push({
           kind: "resource",
           scored: { resource, score: 1 / rec.rank, matchReasons: [] },
@@ -639,10 +625,27 @@ export function ProcessingFlow({
         });
       }
 
-      const localCard = buildLocalCard(resources, userAnswers, geoData, v);
-      if (localCard) {
-        merged.push({ kind: "local", card: localCard });
+      // Build local card with Claude's chosen event/community as anchor
+      const algorithmicLocalCard = buildLocalCard(resources, userAnswers, geoData, v);
+
+      if (eventCommunityRec && eventCommunityResource) {
+        const anchor: ScoredResource = {
+          resource: eventCommunityResource,
+          score: 1 / eventCommunityRec.rank,
+          matchReasons: [],
+        };
+        const extras = algorithmicLocalCard
+          ? [algorithmicLocalCard.anchor, ...algorithmicLocalCard.extras]
+              .filter(s => s.resource.id !== eventCommunityResource!.id)
+          : [];
+        const localItem: ResultItem = {
+          kind: "local",
+          card: { anchor, extras, score: anchor.score, anchorDescription: eventCommunityRec.description },
+        };
+        const insertIdx = Math.min(eventCommunityRec.rank - 1, merged.length);
+        merged.splice(insertIdx, 0, localItem);
       }
+      // When Claude doesn't recommend an event/community, don't show the local card at all
 
       return merged.length > 0
         ? merged
@@ -685,6 +688,14 @@ export function ProcessingFlow({
 
   // ── Render ─────────────────────────────────────────────
 
+  // Determine which visual element is active (URL bar, search bar, or fallback icon)
+  const showUrlBar = !view.profile && !view.snippetLines && !view.citations &&
+    inputType !== "name" && view.statusText.includes("Looking up");
+  // Search bar only when no profile card is visible — avoids clutter
+  const showSearchBar = !view.profile && !view.snippetLines && !view.citations &&
+    view.statusText.includes("Searching") && searchQueryRef.current;
+  const showStepIcon = !showUrlBar && !showSearchBar;
+
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-6">
       <div className="w-full max-w-md">
@@ -697,14 +708,19 @@ export function ProcessingFlow({
             transition={{ duration: 0.4 }}
             className="flex flex-col items-center"
           >
+            {/* URL bar — shown while fetching a profile URL, before profile card appears */}
+            <AnimatePresence>
+              {showUrlBar && <FetchingUrlBar url={input} />}
+            </AnimatePresence>
+
             {/* Profile card — fades in when available, fades out when search results arrive */}
             <AnimatePresence>
               {view.profile && !view.snippetLines && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.35 }}
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  transition={{ duration: 0.4 }}
                   className="mb-6 flex items-center gap-3"
                 >
                   {view.profile.photo && (
@@ -744,8 +760,8 @@ export function ProcessingFlow({
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.35 }}
                   className="mb-6 w-full max-w-sm"
                 >
                   <div className="flex flex-wrap justify-center gap-1.5">
@@ -765,76 +781,73 @@ export function ProcessingFlow({
               )}
             </AnimatePresence>
 
-            {/* Snippet lines — from Perplexity search */}
+            {/* Search bar — shown while searching for a person online */}
+            <AnimatePresence>
+              {showSearchBar && (
+                <SearchQueryBar query={searchQueryRef.current} />
+              )}
+            </AnimatePresence>
+
+            {/* Research card — snippets + sources integrated */}
             <AnimatePresence>
               {view.snippetLines && view.snippetLines.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.35 }}
                   className="mb-5 w-full max-w-sm"
                 >
-                  <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
-                    {view.snippetLines.map((line, i) => (
-                      <motion.li
-                        key={i}
-                        initial={{ opacity: 0, x: -6 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.1, duration: 0.2 }}
-                        className="flex gap-2"
+                  <div className="rounded-lg border border-border bg-card/50 px-4 py-3">
+                    <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+                      {view.snippetLines.map((line, i) => (
+                        <motion.li
+                          key={i}
+                          initial={{ opacity: 0, x: -6 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.15, duration: 0.25 }}
+                          className="flex gap-2"
+                        >
+                          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-accent/50" />
+                          <span>{line}</span>
+                        </motion.li>
+                      ))}
+                    </ul>
+                    {view.citations && view.citations.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: (view.snippetLines.length) * 0.15 + 0.2, duration: 0.3 }}
+                        className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2.5"
                       >
-                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground/40" />
-                        <span>{line}</span>
-                      </motion.li>
-                    ))}
-                  </ul>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Citations / source links */}
-            <AnimatePresence>
-              {view.citations && view.citations.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="mb-6 w-full max-w-sm"
-                >
-                  <p className="mb-2 text-center text-[11px] font-medium uppercase tracking-wider text-muted">
-                    Sources found
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-1.5">
-                    {view.citations.slice(0, 6).map((url, i) => (
-                      <motion.span
-                        key={url}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: i * 0.08, duration: 0.2 }}
-                        className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] text-muted-foreground"
-                      >
-                        {urlToHost(url)}
-                      </motion.span>
-                    ))}
+                        {view.citations.slice(0, 4).map((url) => (
+                          <span
+                            key={url}
+                            className="rounded-full bg-muted/50 px-2 py-0.5 text-[10px] text-muted"
+                          >
+                            {urlToHost(url)}
+                          </span>
+                        ))}
+                      </motion.div>
+                    )}
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Spinner + status text */}
+            {/* Step icon + status text */}
             <div className="flex flex-col items-center gap-3">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-accent" />
+              {showStepIcon && <StepIcon statusText={view.statusText} />}
               <AnimatePresence mode="wait">
                 <motion.p
                   key={view.statusText}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="text-sm text-muted-foreground"
+                  transition={{ duration: 0.25 }}
+                  className="text-sm"
                 >
-                  {view.statusText}
+                  <ShimmerText>{view.statusText.replace(/\.{3}$/, "")}</ShimmerText>
                 </motion.p>
               </AnimatePresence>
             </div>

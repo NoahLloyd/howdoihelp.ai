@@ -21,7 +21,8 @@
     "playwright": "^1.58.2",
     "posthog-js": "^1.356.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "tw-shimmer": "^0.4.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
