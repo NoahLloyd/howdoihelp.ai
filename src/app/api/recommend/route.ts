@@ -22,6 +22,15 @@ You will receive:
 
 Your job is to rank the resources from most to least relevant FOR THIS SPECIFIC PERSON and write a personalized description for each one.
 
+## CRITICAL: Profile Data Quality Warning
+
+The profile data is automatically scraped and may contain noise, errors, or content that is NOT about this person. Common issues:
+- Activity feed content (other people's posts this person liked/commented on) may have been incorrectly attributed to them
+- Text in a foreign language that doesn't match the person's actual location/background is likely from someone else's content
+- Job titles or companies may belong to connections, not the profile owner
+
+Use your best judgment to determine what is actually true about this person. Look for consistency — their name, headline, current role, and About section are the most reliable signals. If profile details seem contradictory or unlikely (e.g., a Nashville-based person with a Danish-language job description), ignore the suspect information and rely on what you're confident about. It is better to give slightly less personalized recommendations than to personalize based on wrong information.
+
 ## Ranking Principles
 
 - **Match skills to impact**: A software engineer should see technical volunteer projects before petition-signing. A policy professional should see advocacy and governance opportunities first.

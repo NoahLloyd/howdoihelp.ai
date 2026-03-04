@@ -143,16 +143,10 @@ export async function scrapeLinkedInProfile(url: string): Promise<{
       ));
     }
 
-    // Build a richer summary that includes about + activity interests
-    let fullSummary = summary || "";
-    if (textData.activityPosts.length > 0) {
-      const interestSnippets = textData.activityPosts
-        .map((p) => p.slice(0, 150))
-        .join(" | ");
-      fullSummary = fullSummary
-        ? `${fullSummary}\n\nRecent interests/activity: ${interestSnippets}`
-        : `Recent interests/activity: ${interestSnippets}`;
-    }
+    // Activity posts are other people's content the user liked/commented on —
+    // including them causes Claude to confuse those authors' work with this person.
+    // Only use the About section for the summary.
+    const fullSummary = summary || "";
 
     // Build cleaned text for Claude fallback extraction
     // Include og:description at the top since it often has rich About text
@@ -436,7 +430,6 @@ interface TextContent {
   volunteer: { role: string; org: string; description?: string }[];
   publications: { title: string; journal?: string }[];
   awards: { name: string; issuer?: string; description?: string }[];
-  activityPosts: string[];
 }
 
 function extractTextContent(html: string): TextContent {
@@ -446,7 +439,6 @@ function extractTextContent(html: string): TextContent {
     volunteer: [],
     publications: [],
     awards: [],
-    activityPosts: [],
   };
 
   // Strip HTML tags, decode entities, filter CSS class junk
@@ -493,21 +485,8 @@ function extractTextContent(html: string): TextContent {
       .slice(0, 500);
   }
 
-  // Activity posts — shows what the person is interested in
-  const activityLines = findSection("Activity");
-  if (activityLines.length > 0) {
-    // Extract post snippets (lines > 30 chars that aren't UI elements)
-    const posts = activityLines
-      .filter((l) =>
-        l.length > 30 &&
-        !l.startsWith("Liked by") &&
-        !l.startsWith("Join now") &&
-        !l.includes("See credential") &&
-        !l.startsWith("Follow")
-      )
-      .slice(0, 5); // Keep top 5 activity snippets
-    result.activityPosts = [...new Set(posts)]; // Deduplicate
-  }
+  // Activity posts are skipped — they contain other people's content that the
+  // user merely liked/commented on, which confuses downstream extraction.
 
   // Education with activities/societies
   const eduLines = findSection("Education");
@@ -719,6 +698,26 @@ function buildCleanedText(html: string): string {
       !l.includes("Privacy Policy") &&
       l !== "-"
     );
+
+  // Strip the Activity section — it contains other people's posts that the
+  // user liked/commented on and confuses Claude into misidentifying the person.
+  const activityStart = lines.findIndex((l) => l === "Activity" || l.startsWith("Activity"));
+  const sectionHeaders = [
+    "Experience", "Education", "Licenses & Certifications",
+    "Volunteer Experience", "Publications", "Honors & Awards",
+    "Languages", "More activity by",
+  ];
+  if (activityStart !== -1) {
+    const activityEnd = lines.findIndex(
+      (l, i) => i > activityStart && sectionHeaders.some((h) => l === h || l.startsWith(h)),
+    );
+    if (activityEnd !== -1) {
+      lines.splice(activityStart, activityEnd - activityStart);
+    } else {
+      // Activity was the last section — remove everything after it
+      lines.splice(activityStart);
+    }
+  }
 
   // Deduplicate consecutive identical lines
   const deduped: string[] = [];

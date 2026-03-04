@@ -123,8 +123,8 @@ export async function GET(req: Request) {
           .filter(Boolean)
           .join(", ");
         const query = context
-          ? `${enrichedProfile.fullName} — ${context}`
-          : enrichedProfile.fullName;
+          ? `"${enrichedProfile.fullName}" — ${context}`
+          : `"${enrichedProfile.fullName}"`;
         const { text } = await searchPerson(query);
         if (text) {
           perplexityText = text;

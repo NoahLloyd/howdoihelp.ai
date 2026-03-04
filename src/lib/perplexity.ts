@@ -61,7 +61,8 @@ export async function searchPerson(query: string): Promise<{
         },
         {
           role: "user",
-          content: query,
+          // Wrap in quotes if not already quoted to force exact-name matching
+          content: query.startsWith('"') ? query : `"${query}"`,
         },
       ],
     });
