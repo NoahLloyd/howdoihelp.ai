@@ -55,15 +55,21 @@ async function main() {
   console.log(`  ${new Date().toISOString()}`);
   console.log('='.repeat(60));
 
-  // Phase 1: Gather from BlueDot
+  // Phase 1: Gather from all sources
   console.log('\n\n--- PHASE 1: GATHERING ---\n');
-  console.log('Running BlueDot Impact gatherer...\n');
 
   const gatherArgs = dryRun ? ['--dry-run'] : [];
-  const result = await runScript('scripts/gatherers/gather-bluedot.ts', gatherArgs);
 
-  if (!result.success) {
+  console.log('Running BlueDot Impact gatherer...\n');
+  const bluedotResult = await runScript('scripts/gatherers/gather-bluedot.ts', gatherArgs);
+  if (!bluedotResult.success) {
     console.error('\n  WARNING: BlueDot gatherer had errors.\n');
+  }
+
+  console.log('\nRunning AISafety.com gatherer (programs)...\n');
+  const aisafetyResult = await runScript('scripts/gatherers/gather-aisafety.ts', ['--programs', ...gatherArgs]);
+  if (!aisafetyResult.success) {
+    console.error('\n  WARNING: AISafety.com programs gatherer had errors.\n');
   }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);

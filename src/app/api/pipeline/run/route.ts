@@ -16,6 +16,7 @@ const SCRIPT_MAP: Record<string, string> = {
   "sync-all-communities": "scripts/sync-all-communities.ts",
   // Programs pipeline
   "gather-bluedot": "scripts/gatherers/gather-bluedot.ts",
+  "gather-aisafety-programs": "scripts/gatherers/gather-aisafety.ts",
   "sync-programs": "scripts/sync-programs.ts",
 };
 
@@ -39,6 +40,11 @@ export async function GET(req: Request) {
 
   const scriptPath = SCRIPT_MAP[scriptId];
   const args = ["tsx", scriptPath];
+
+  // AISafety programs gatherer needs the --programs flag
+  if (scriptId === "gather-aisafety-programs") {
+    args.push("--programs");
+  }
 
   // For individual gatherers, add --dry-run in dry-run mode
   if (mode === "dry-run" && scriptId !== "sync-all" && scriptId !== "evaluate" && scriptId !== "sync-all-communities" && scriptId !== "evaluate-community") {

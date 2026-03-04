@@ -40,34 +40,42 @@ export async function insertProgramCandidates(programs: GatheredProgram[]): Prom
 
   if (programs.length === 0) return result;
 
-  // Fetch existing candidates for dedup by source_id (not URL — multiple rounds share a course URL)
+  // Fetch existing candidates for dedup by source_id and URL
   const { data: existing } = await supabase
     .from('program_candidates')
-    .select('source, source_id');
+    .select('source, source_id, url');
 
   const existingKeys = new Set<string>();
+  const existingUrls = new Set<string>();
   for (const row of existing || []) {
     if (row.source && row.source_id) {
       existingKeys.add(`${row.source}:${row.source_id}`);
+    }
+    if (row.url) {
+      existingUrls.add(normalizeUrl(row.url));
     }
   }
 
   // Also check resources table to avoid re-gathering already-promoted programs
   const { data: existingResources } = await supabase
     .from('resources')
-    .select('source, source_id')
+    .select('source, source_id, url')
     .eq('category', 'programs');
 
   for (const row of existingResources || []) {
     if (row.source && row.source_id) {
       existingKeys.add(`${row.source}:${row.source_id}`);
     }
+    if (row.url) {
+      existingUrls.add(normalizeUrl(row.url));
+    }
   }
 
   for (const prog of programs) {
     const key = `${prog.source}:${prog.source_id}`;
+    const normalUrl = normalizeUrl(prog.url);
 
-    if (existingKeys.has(key)) {
+    if (existingKeys.has(key) || existingUrls.has(normalUrl)) {
       result.skipped++;
       continue;
     }
@@ -100,8 +108,18 @@ export async function insertProgramCandidates(programs: GatheredProgram[]): Prom
     } else {
       result.inserted++;
       existingKeys.add(key);
+      existingUrls.add(normalUrl);
     }
   }
 
   return result;
+}
+
+function normalizeUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return (u.hostname.replace(/^www\./, '') + u.pathname.replace(/\/+$/, '')).toLowerCase();
+  } catch {
+    return url.toLowerCase().trim();
+  }
 }

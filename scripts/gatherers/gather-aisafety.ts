@@ -19,6 +19,7 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
 import { insertCandidates, type GatheredEvent } from '../lib/insert-candidates';
+import { insertProgramCandidates, type GatheredProgram } from '../lib/insert-program-candidates';
 
 const AIRTABLE_SHARE_URL = 'https://airtable.com/appF8XfZUGXtfi40E/shrLgl03tMK4q6cyc/tblx0L8qJEaLBxJFS';
 const AIRTABLE_APP_ID = 'appF8XfZUGXtfi40E';
@@ -47,6 +48,15 @@ const TYPE_MAP: Record<string, string> = {
   selM7Z1ysKPa3Da6m: 'Other',
   sel9dt5eD1hKAEoQL: 'Retreat',
   sel9vPtntPplXbSkz: 'Workshop',
+};
+
+// Types that belong in the programs pipeline (not events)
+const PROGRAM_TYPES = new Set(['Bootcamp', 'Course', 'Fellowship']);
+
+const PROGRAM_TYPE_TO_COURSE_TYPE: Record<string, string> = {
+  Bootcamp: 'intensive',
+  Course: 'self-paced',
+  Fellowship: 'fellowship',
 };
 
 const LOCATION_MAP: Record<string, string> = {
@@ -153,7 +163,7 @@ function resolveMultiSelect(ids: string[] | null | undefined, map: Record<string
   return ids.map(id => map[id] || id).filter(Boolean);
 }
 
-export async function gather(): Promise<GatheredEvent[]> {
+export async function gather(mode: 'events' | 'programs' = 'events'): Promise<GatheredEvent[]> {
   console.log('  Fetching signed API URL from shared view...');
   const apiUrl = await getSignedApiUrl();
   if (!apiUrl) return [];
@@ -182,6 +192,12 @@ export async function gather(): Promise<GatheredEvent[]> {
     const types = resolveMultiSelect(cells[COL.TYPE], TYPE_MAP);
     const locations = resolveMultiSelect(cells[COL.LOCATION], LOCATION_MAP);
 
+    // Filter based on mode: programs pipeline gets Bootcamp/Course/Fellowship,
+    // events pipeline gets everything else
+    const isProgram = types.some(t => PROGRAM_TYPES.has(t));
+    if (mode === 'programs' && !isProgram) continue;
+    if (mode === 'events' && isProgram) continue;
+
     const location = locations.length > 0 ? locations.join(', ') : 'Location TBD';
 
     events.push({
@@ -200,23 +216,95 @@ export async function gather(): Promise<GatheredEvent[]> {
   return events;
 }
 
+export async function gatherPrograms(): Promise<GatheredProgram[]> {
+  console.log('  Fetching signed API URL from shared view...');
+  const apiUrl = await getSignedApiUrl();
+  if (!apiUrl) return [];
+
+  console.log('  Fetching table data...');
+  const data = await fetchTableData(apiUrl);
+  if (!data) return [];
+
+  console.log(`  → ${data.rows.length} rows in Airtable`);
+
+  const programs: GatheredProgram[] = [];
+
+  for (const row of data.rows) {
+    const cells = row.cellValuesByColumnId;
+
+    const name = cells[COL.NAME];
+    if (!name) continue;
+
+    const linkField = cells[COL.LINK];
+    const url = linkField?.url;
+    if (!url) continue;
+
+    const startDate = cells[COL.START_DATE];
+    const endDate = cells[COL.END_DATE];
+    const description = cells[COL.DESCRIPTION];
+    const types = resolveMultiSelect(cells[COL.TYPE], TYPE_MAP);
+    const locations = resolveMultiSelect(cells[COL.LOCATION], LOCATION_MAP);
+
+    // Only include program types
+    const programType = types.find(t => PROGRAM_TYPES.has(t));
+    if (!programType) continue;
+
+    const location = locations.length > 0 ? locations.join(', ') : 'Location TBD';
+
+    programs.push({
+      title: name,
+      description: description?.substring(0, 500) || undefined,
+      url,
+      source: 'aisafety',
+      source_id: row.id,
+      source_org: 'AISafety.com',
+      location,
+      course_type: PROGRAM_TYPE_TO_COURSE_TYPE[programType] || 'self-paced',
+      start_date: startDate ? startDate.substring(0, 10) : undefined,
+      end_date: endDate ? endDate.substring(0, 10) : undefined,
+    });
+  }
+
+  return programs;
+}
+
 // CLI entrypoint
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
-  console.log(`📡 AISafety.com Airtable Gatherer${dryRun ? ' (DRY RUN)' : ''}\n`);
-  const events = await gather();
-  console.log(`\n  ${events.length} events extracted.`);
+  const programsMode = process.argv.includes('--programs');
 
-  if (dryRun) {
-    for (const e of events) {
-      console.log(`  [${e.source}] ${e.event_date || 'no-date'} | ${e.title} | ${e.location} | ${e.url}`);
+  const modeLabel = programsMode ? 'Programs' : 'Events';
+  console.log(`📡 AISafety.com Airtable Gatherer — ${modeLabel}${dryRun ? ' (DRY RUN)' : ''}\n`);
+
+  if (programsMode) {
+    const programs = await gatherPrograms();
+    console.log(`\n  ${programs.length} programs extracted.`);
+
+    if (dryRun) {
+      for (const p of programs) {
+        console.log(`  [${p.source}] ${p.course_type} | ${p.title} | ${p.location} | ${p.url}`);
+      }
+      console.log(`\n✅ Dry run complete. ${programs.length} programs would be inserted.`);
+      return;
     }
-    console.log(`\n✅ Dry run complete. ${events.length} events would be inserted.`);
-    return;
-  }
 
-  const result = await insertCandidates(events);
-  console.log(`\n✅ Done: ${result.inserted} new candidates, ${result.skipped} skipped, ${result.errors} errors.`);
+    const result = await insertProgramCandidates(programs);
+    console.log(`\n✅ Done: ${result.inserted} new candidates, ${result.skipped} skipped, ${result.errors} errors.`);
+  } else {
+    const events = await gather('events');
+    console.log(`\n  ${events.length} events extracted.`);
+
+    if (dryRun) {
+      for (const e of events) {
+        console.log(`  [${e.source}] ${e.event_date || 'no-date'} | ${e.title} | ${e.location} | ${e.url}`);
+      }
+      console.log(`\n✅ Dry run complete. ${events.length} events would be inserted.`);
+      return;
+    }
+
+    const result = await insertCandidates(events);
+    console.log(`\n✅ Done: ${result.inserted} new candidates, ${result.skipped} skipped, ${result.errors} errors.`);
+  }
 }
 
 main().catch((err) => {
