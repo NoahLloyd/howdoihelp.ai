@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { fetchResources, trackClick } from "@/lib/data";
-import { rankResources, buildLocalCard } from "@/lib/ranking";
 import { getGeoData } from "@/lib/geo";
 import {
   trackResultsViewed,
   trackResourceClicked,
-  trackStackExpanded,
   trackBrowseFilterUsed,
   trackTimeToFirstClick,
   trackScrollDepth,
@@ -16,41 +14,186 @@ import {
 } from "@/lib/tracking";
 import type {
   Resource,
-  ScoredResource,
-  LocalCard,
   Variant,
   GeoData,
   UserAnswers,
-  TimeCommitment,
-  ResourceCategory,
 } from "@/types";
 import { ResourceCard } from "@/components/results/resource-card";
 import { LocationPicker } from "@/components/results/location-picker";
 
-type SortMode = "relevance" | "date" | "quick";
-type CategoryFilter = "all" | ResourceCategory;
-type TimeFilter = "any" | "quick" | "hours" | "deep";
+// ─── Path definitions ─────────────────────────────────────────
 
-const CATEGORIES: { value: CategoryFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "events", label: "Events" },
-  { value: "communities", label: "Communities" },
-  { value: "programs", label: "Programs" },
-  { value: "letters", label: "Letters" },
+type PathId = "quick" | "learn" | "connect" | "act" | "career";
+
+interface PathDef {
+  id: PathId;
+  label: string;
+  description: string;
+}
+
+const PATHS: PathDef[] = [
+  { id: "quick", label: "2-minute actions", description: "Things you can do right now." },
+  { id: "learn", label: "Learn", description: "Understand AI safety better." },
+  { id: "connect", label: "Connect", description: "Find your people." },
+  { id: "act", label: "Take action", description: "Make your voice heard." },
+  { id: "career", label: "Build a career", description: "Go deep on AI safety." },
 ];
 
-const TIME_FILTERS: { value: TimeFilter; label: string }[] = [
-  { value: "any", label: "Any time" },
-  { value: "quick", label: "< 15 min" },
-  { value: "hours", label: "Hours" },
-  { value: "deep", label: "Days+" },
+// ─── Resource → Path mapping ──────────────────────────────────
+
+const OTHER_PATH_MAP: Record<string, PathId> = {
+  "aisafety-chatbot": "quick",
+  "fli-asset-pack": "quick",
+  "aisafety-media": "learn",
+  "aisafety-field-map": "learn",
+  "1-on-1-conversation": "connect",
+  "talk-to-people": "connect",
+  "controlai-legislators": "act",
+  "tabling": "act",
+  "create-content": "act",
+  "donation-guide": "act",
+  "80k-ai-safety": "career",
+  "80k-job-board": "career",
+  "volunteer-projects": "career",
+  "mentor-others": "career",
+};
+
+function assignPath(resource: Resource): PathId {
+  switch (resource.category) {
+    case "letters": return "quick";
+    case "communities":
+    case "events": return "connect";
+    case "programs": return "learn";
+    case "other": return OTHER_PATH_MAP[resource.id] ?? "act";
+    default: return "act";
+  }
+}
+
+/** Filter out events whose date has already passed */
+function isNotPastEvent(resource: Resource): boolean {
+  if (!resource.event_date) return true;
+  const eventDate = new Date(resource.event_date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return eventDate >= today;
+}
+
+function sortByImpact(a: Resource, b: Resource): number {
+  const ratioA = a.ev_general / Math.max(a.friction, 0.01);
+  const ratioB = b.ev_general / Math.max(b.friction, 0.01);
+  return ratioB - ratioA;
+}
+
+function sortByEventDate(a: Resource, b: Resource): number {
+  const dateA = a.event_date || "9999";
+  const dateB = b.event_date || "9999";
+  if (dateA !== dateB) return dateA.localeCompare(dateB);
+  return sortByImpact(a, b);
+}
+
+function sortByQuickest(a: Resource, b: Resource): number {
+  return a.min_minutes - b.min_minutes;
+}
+
+/** Check if a resource's location is "Online" */
+function isOnline(r: Resource): boolean {
+  const loc = r.location.toLowerCase();
+  return loc === "online";
+}
+
+/**
+ * Nearness score: how close a resource is to the user.
+ *  3 = same city
+ *  2 = same region/state
+ *  1 = same country
+ *  0.5 = global / online (available everywhere)
+ *  0 = different country / specific location far away
+ */
+function nearness(r: Resource, geo: GeoData | null): number {
+  if (!geo) return 0.5;
+  const loc = r.location.toLowerCase();
+  if (!loc) return 0.5;
+  if (loc === "online") return 0.5;
+  if (loc === "global") return 0.5;
+  if (geo.city && loc.includes(geo.city.toLowerCase())) return 3;
+  if (geo.region && loc.includes(geo.region.toLowerCase())) return 2;
+  if (geo.country && geo.country !== "Unknown" && loc.includes(geo.country.toLowerCase())) return 1;
+  // Check 2-letter country code as standalone word
+  if (geo.countryCode && geo.countryCode !== "XX" && geo.countryCode.length === 2) {
+    const pattern = new RegExp(`\\b${geo.countryCode.toLowerCase()}\\b`);
+    if (pattern.test(loc)) return 1;
+  }
+  return 0;
+}
+
+/** Check if a resource is at least somewhat near (city, region, or country match) */
+function isNearby(r: Resource, geo: GeoData | null): boolean {
+  return nearness(r, geo) >= 1;
+}
+
+/** Sort by nearness (closest first), then by impact within the same nearness tier */
+function sortByNearness(geo: GeoData | null) {
+  return (a: Resource, b: Resource): number => {
+    const na = nearness(a, geo);
+    const nb = nearness(b, geo);
+    if (na !== nb) return nb - na;
+    return sortByImpact(a, b);
+  };
+}
+
+/** Text search against title + description + source_org */
+function matchesSearch(r: Resource, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return (
+    r.title.toLowerCase().includes(q) ||
+    r.description.toLowerCase().includes(q) ||
+    r.source_org.toLowerCase().includes(q)
+  );
+}
+
+const INITIAL_SHOW = 6;
+
+// ─── Sort definitions ─────────────────────────────────────────
+
+type SortId = "relevance" | "soonest" | "quickest";
+
+const SORT_OPTIONS: { id: SortId; label: string }[] = [
+  { id: "relevance", label: "Best match" },
+  { id: "soonest", label: "Soonest" },
+  { id: "quickest", label: "Quickest" },
 ];
 
-const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: "relevance", label: "Best match" },
-  { value: "date", label: "Soonest" },
-  { value: "quick", label: "Quickest" },
+function applySortToResources(resources: Resource[], sort: SortId): Resource[] {
+  const arr = [...resources];
+  switch (sort) {
+    case "soonest": return arr.sort(sortByEventDate);
+    case "quickest": return arr.sort(sortByQuickest);
+    default: return arr.sort(sortByImpact);
+  }
+}
+
+// ─── Location filter ──────────────────────────────────────────
+
+type LocationFilter = "all" | "near" | "online";
+
+const LOCATION_FILTERS: { id: LocationFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "near", label: "Near me" },
+  { id: "online", label: "Online" },
 ];
+
+// ─── Time filter ──────────────────────────────────────────────
+
+type TimeFilter = "any" | "quick" | "deep";
+
+const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
+  { id: "any", label: "Any time" },
+  { id: "quick", label: "Under 1 hour" },
+  { id: "deep", label: "Multi-week" },
+];
+
+// ─── Main Component ──────────────────────────────────────────
 
 interface BrowseResultsProps {
   variant: Variant;
@@ -60,11 +203,7 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
   const [allResources, setAllResources] = useState<Resource[]>([]);
   const [geo, setGeo] = useState<GeoData | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Filters
-  const [category, setCategory] = useState<CategoryFilter>("all");
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>("any");
-  const [sort, setSort] = useState<SortMode>("relevance");
+  const [activePath, setActivePath] = useState<PathId>("quick");
 
   // Tracking refs
   const loadedAtRef = useRef<number>(0);
@@ -77,21 +216,16 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
         fetchResources(),
         getGeoData(),
       ]);
-      setAllResources(resources);
+      const activeResources = resources.filter(isNotPastEvent);
+      setAllResources(activeResources);
       setGeo(geoData);
       identifyGeo(geoData.countryCode);
       loadedAtRef.current = Date.now();
 
       trackResultsViewed(
-        variant,
-        "significant",
-        undefined,
-        false,
-        undefined,
-        resources.length,
-        "browse"
+        variant, "significant", undefined, false, undefined,
+        activeResources.length, "browse"
       );
-
       setLoading(false);
     }
     init();
@@ -122,24 +256,16 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
   const handleResourceClick = useCallback(
     (resourceId: string, position: number) => {
       if (!geo) return;
-
-      // Time to first click
       if (!firstClickTrackedRef.current && loadedAtRef.current) {
         trackTimeToFirstClick(variant, Date.now() - loadedAtRef.current);
         firstClickTrackedRef.current = true;
       }
-
       const answers: UserAnswers = { time: "significant" };
       trackClick(resourceId, variant, answers, geo.countryCode);
-
       const resource = allResources.find((r) => r.id === resourceId);
       if (resource) {
         trackResourceClicked(
-          resourceId,
-          resource.title,
-          resource.category,
-          variant,
-          position,
+          resourceId, resource.title, resource.category, variant, position,
           loadedAtRef.current ? Date.now() - loadedAtRef.current : undefined
         );
       }
@@ -147,58 +273,22 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
     [allResources, variant, geo]
   );
 
-  // Filter and sort resources
-  const filtered = allResources.filter((r) => {
-    if (category !== "all" && r.category !== category) return false;
-    if (timeFilter === "quick" && r.min_minutes > 15) return false;
-    if (timeFilter === "hours" && (r.min_minutes < 15 || r.min_minutes > 480)) return false;
-    if (timeFilter === "deep" && r.min_minutes < 480) return false;
-    return true;
-  });
-
-  // Score and sort
-  const answers: UserAnswers = { time: "significant" };
-  const scored: ScoredResource[] = geo
-    ? filtered.map((r) => {
-        const ranked = rankResources([r], answers, geo, variant, 1, 1);
-        return ranked[0] || { resource: r, score: r.ev_general, matchReasons: [] };
-      })
-    : filtered.map((r) => ({ resource: r, score: r.ev_general, matchReasons: [] }));
-
-  const sorted = [...scored].sort((a, b) => {
-    if (sort === "date") {
-      const aDate = a.resource.event_date || a.resource.deadline_date || "9999";
-      const bDate = b.resource.event_date || b.resource.deadline_date || "9999";
-      return aDate.localeCompare(bDate);
+  // Group resources by path
+  const grouped = useMemo(() => {
+    const map = new Map<PathId, Resource[]>();
+    for (const path of PATHS) map.set(path.id, []);
+    for (const resource of allResources) {
+      map.get(assignPath(resource))?.push(resource);
     }
-    if (sort === "quick") {
-      return a.resource.min_minutes - b.resource.min_minutes;
-    }
-    return b.score - a.score;
-  });
+    return map;
+  }, [allResources]);
 
-  // Build local card if showing "all" or local categories
-  const localCard =
-    geo && (category === "all" || category === "events" || category === "communities")
-      ? buildLocalCard(allResources, answers, geo, variant)
-      : null;
-
-  // Non-local results (when showing all, exclude events/communities since they're in the local card)
-  const mainResults =
-    category === "all"
-      ? sorted.filter(
-          (s) => s.resource.category !== "events" && s.resource.category !== "communities"
-        )
-      : sorted;
+  const activePathDef = PATHS.find((p) => p.id === activePath)!;
 
   if (loading) {
     return (
       <main className="flex min-h-dvh items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-muted-foreground"
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-muted-foreground">
           Loading...
         </motion.div>
       </main>
@@ -219,110 +309,81 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
           </h1>
         </motion.div>
 
-        {/* Filters */}
+        {/* Path pills */}
         <motion.div
-          className="mt-6 flex flex-col gap-3"
+          className="-mx-6 mt-6 overflow-x-auto px-6"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
+          style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
         >
-          {/* Category pills */}
-          <div className="flex flex-wrap gap-1.5">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.value}
-                onClick={() => {
-                  setCategory(cat.value);
-                  trackBrowseFilterUsed(variant, "category", cat.value);
-                }}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                  category === cat.value
-                    ? "bg-accent text-white"
-                    : "border border-border bg-card text-muted-foreground hover:border-accent/30 hover:text-foreground"
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Time + sort row */}
-          <div className="flex items-center gap-2">
-            <select
-              value={timeFilter}
-              onChange={(e) => {
-                setTimeFilter(e.target.value as TimeFilter);
-                trackBrowseFilterUsed(variant, "time", e.target.value);
-              }}
-              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-accent"
-            >
-              {TIME_FILTERS.map((tf) => (
-                <option key={tf.value} value={tf.value}>
-                  {tf.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={sort}
-              onChange={(e) => {
-                setSort(e.target.value as SortMode);
-                trackBrowseFilterUsed(variant, "sort", e.target.value);
-              }}
-              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-accent"
-            >
-              {SORT_OPTIONS.map((so) => (
-                <option key={so.value} value={so.value}>
-                  {so.label}
-                </option>
-              ))}
-            </select>
-            <span className="ml-auto text-xs text-muted">
-              {category === "all" ? mainResults.length + (localCard ? 1 : 0) : mainResults.length} results
-            </span>
+          <div className="flex gap-2 pb-1">
+            {PATHS.map((path) => {
+              const count = grouped.get(path.id)?.length ?? 0;
+              const isActive = activePath === path.id;
+              return (
+                <button
+                  key={path.id}
+                  onClick={() => {
+                    setActivePath(path.id);
+                    trackBrowseFilterUsed(variant, "category", path.id);
+                  }}
+                  className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                    isActive
+                      ? "bg-accent text-white shadow-sm"
+                      : "border border-border bg-card text-muted-foreground hover:border-accent/30 hover:text-foreground"
+                  }`}
+                >
+                  {path.label}
+                  {count > 0 && (
+                    <span className={`ml-1.5 text-xs ${isActive ? "text-white/70" : "text-muted"}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </motion.div>
 
-        {/* Results */}
-        <motion.div
-          className="mt-6 flex flex-col gap-3"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-        >
-          {/* Local card (events/communities) — show at top when browsing all */}
-          {category === "all" && localCard && (
-            <LocalCardBrowse
-              card={localCard}
-              variant={variant}
-              geo={geo}
-              onClickTrack={handleResourceClick}
-              onLocationChange={handleLocationChange}
-            />
-          )}
-
-          {mainResults.map((scored, i) => (
-            <motion.div
-              key={scored.resource.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 * Math.min(i, 10) }}
-            >
-              <ResourceCard
-                scored={scored}
-                variant={variant}
-                onClickTrack={(id) =>
-                  handleResourceClick(id, i + (localCard ? 1 : 0))
-                }
-              />
-            </motion.div>
-          ))}
-
-          {mainResults.length === 0 && !localCard && (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No results match your filters. Try broadening your search.
+        {/* Active path content */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activePath}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25 }}
+          >
+            <p className="mt-5 text-sm text-muted-foreground">
+              {activePathDef.description}
             </p>
-          )}
-        </motion.div>
+
+            <div className="mt-4">
+              {activePath === "connect" ? (
+                <ConnectExplorer
+                  resources={grouped.get("connect") ?? []}
+                  variant={variant}
+                  geo={geo}
+                  onClickTrack={handleResourceClick}
+                  onLocationChange={handleLocationChange}
+                />
+              ) : activePath === "learn" ? (
+                <LearnExplorer
+                  resources={grouped.get("learn") ?? []}
+                  variant={variant}
+                  onClickTrack={handleResourceClick}
+                />
+              ) : (
+                <SimpleExplorer
+                  resources={grouped.get(activePath) ?? []}
+                  variant={variant}
+                  onClickTrack={handleResourceClick}
+                />
+              )}
+            </div>
+          </motion.div>
+        </AnimatePresence>
 
         <div className="pb-8" />
       </div>
@@ -330,123 +391,529 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
   );
 }
 
-// ─── Local Card for Browse ──────────────────────────────────
+// ─── Search Input ─────────────────────────────────────────────
 
-interface LocalCardBrowseProps {
-  card: LocalCard;
+function SearchInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative">
+      <svg
+        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+      </svg>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-border bg-card py-2.5 pl-10 pr-9 text-sm outline-none transition-colors placeholder:text-muted focus:border-accent/50 focus:ring-2 focus:ring-accent/10"
+      />
+      {value && (
+        <button
+          onClick={() => onChange("")}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted transition-colors hover:text-foreground"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Filter Chips ─────────────────────────────────────────────
+
+function FilterChips<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => (
+        <button
+          key={opt.id}
+          onClick={() => onChange(opt.id)}
+          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+            value === opt.id
+              ? "bg-foreground/10 text-foreground"
+              : "text-muted hover:bg-card-hover hover:text-muted-foreground"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Resource List with Show More ─────────────────────────────
+
+function ResourceList({
+  resources,
+  variant,
+  onClickTrack,
+  highlightFirst = false,
+  initialShow = INITIAL_SHOW,
+}: {
+  resources: Resource[];
+  variant: Variant;
+  onClickTrack: (resourceId: string, position: number) => void;
+  highlightFirst?: boolean;
+  initialShow?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Reset expansion when resource list changes substantially
+  const countRef = useRef(resources.length);
+  useEffect(() => {
+    if (Math.abs(resources.length - countRef.current) > 2) {
+      setExpanded(false);
+    }
+    countRef.current = resources.length;
+  }, [resources.length]);
+
+  if (resources.length === 0) {
+    return (
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        No results match your filters.
+      </p>
+    );
+  }
+
+  const needsTruncation = resources.length > initialShow;
+  const visible = expanded || !needsTruncation ? resources : resources.slice(0, initialShow);
+  const hiddenCount = resources.length - initialShow;
+
+  return (
+    <>
+      <div className="flex flex-col gap-3">
+        {visible.map((resource, i) => (
+          <motion.div
+            key={resource.id}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.03 * Math.min(i, 10) }}
+          >
+            <ResourceCard
+              scored={{ resource, score: resource.ev_general, matchReasons: [] }}
+              variant={variant}
+              isPrimary={highlightFirst && i === 0}
+              onClickTrack={(id) => onClickTrack(id, i)}
+            />
+          </motion.div>
+        ))}
+      </div>
+
+      {needsTruncation && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-3 w-full rounded-xl border border-border bg-card/60 px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/30 hover:bg-card-hover hover:text-foreground"
+        >
+          {expanded ? "Show less" : `Show ${hiddenCount} more`}
+        </button>
+      )}
+    </>
+  );
+}
+
+// ─── Connect Explorer (communities + events) ─────────────────
+
+type ConnectTab = "communities" | "events" | "other";
+
+const CONNECT_TABS: { id: ConnectTab; label: string }[] = [
+  { id: "communities", label: "Communities" },
+  { id: "events", label: "Events" },
+  { id: "other", label: "Other" },
+];
+
+interface ConnectExplorerProps {
+  resources: Resource[];
   variant: Variant;
   geo: GeoData | null;
   onClickTrack: (resourceId: string, position: number) => void;
   onLocationChange: (geo: GeoData) => void;
 }
 
-function LocalCardBrowse({
-  card,
-  variant,
-  geo,
-  onClickTrack,
-  onLocationChange,
-}: LocalCardBrowseProps) {
-  const [expanded, setExpanded] = useState(false);
-  const extras = card.extras;
+function ConnectExplorer({ resources, variant, geo, onClickTrack, onLocationChange }: ConnectExplorerProps) {
+  const [search, setSearch] = useState("");
+  const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
+  const [sort, setSort] = useState<SortId>("relevance");
 
-  const hasCommunities =
-    card.anchor.resource.category === "communities" ||
-    extras.some((e) => e.resource.category === "communities");
-  const hasEvents =
-    card.anchor.resource.category === "events" ||
-    extras.some((e) => e.resource.category === "events");
-  const label =
-    hasCommunities && hasEvents
-      ? "communities & events"
-      : hasCommunities
-        ? "communities"
-        : "events";
+  // Split resources by sub-type
+  const communities = useMemo(
+    () => resources.filter((r) => r.category === "communities"),
+    [resources]
+  );
+  const events = useMemo(
+    () => resources.filter((r) => r.category === "events"),
+    [resources]
+  );
+  const other = useMemo(
+    () => resources.filter((r) => r.category !== "communities" && r.category !== "events"),
+    [resources]
+  );
+
+  // Default to whichever tab has content
+  const defaultTab: ConnectTab = communities.length > 0 ? "communities" : events.length > 0 ? "events" : "other";
+  const [tab, setTab] = useState<ConnectTab>(defaultTab);
+
+  // If current tab becomes empty, switch
+  useEffect(() => {
+    const pool = tab === "communities" ? communities : tab === "events" ? events : other;
+    if (pool.length === 0) {
+      if (communities.length > 0) setTab("communities");
+      else if (events.length > 0) setTab("events");
+      else if (other.length > 0) setTab("other");
+    }
+  }, [tab, communities.length, events.length, other.length, communities, events, other]);
+
+  // Determine which tabs to show (hide empty tabs)
+  const visibleTabs = useMemo(() => {
+    const tabs: { id: ConnectTab; label: string }[] = [];
+    if (communities.length > 0) tabs.push(CONNECT_TABS[0]);
+    if (events.length > 0) tabs.push(CONNECT_TABS[1]);
+    if (other.length > 0) tabs.push(CONNECT_TABS[2]);
+    return tabs;
+  }, [communities.length, events.length, other.length]);
+
+  // Pick the right pool based on tab
+  const pool = tab === "communities" ? communities : tab === "events" ? events : other;
+
+  // Apply filters
+  const filtered = useMemo(() => {
+    let items = pool;
+
+    // Search
+    if (search) {
+      items = items.filter((r) => matchesSearch(r, search));
+    }
+
+    // Location filter
+    if (locationFilter === "near") {
+      items = items.filter((r) => isNearby(r, geo));
+    } else if (locationFilter === "online") {
+      items = items.filter((r) => isOnline(r) || r.location.toLowerCase() === "global");
+    }
+
+    // Sort — always factor in nearness for communities & events
+    if (sort === "relevance") {
+      if (tab === "events") {
+        // Nearness first, then date within same nearness tier
+        items = [...items].sort((a, b) => {
+          const na = nearness(a, geo);
+          const nb = nearness(b, geo);
+          // Group into tiers: nearby (>=1), global/online (0.5), far (0)
+          const tierA = na >= 1 ? 2 : na > 0 ? 1 : 0;
+          const tierB = nb >= 1 ? 2 : nb > 0 ? 1 : 0;
+          if (tierA !== tierB) return tierB - tierA;
+          return sortByEventDate(a, b);
+        });
+      } else {
+        items = [...items].sort(sortByNearness(geo));
+      }
+    } else {
+      items = applySortToResources(items, sort);
+    }
+
+    return items;
+  }, [pool, search, locationFilter, sort, tab, geo]);
+
+  // Counts for tabs
+  const tabCounts: Record<ConnectTab, number> = {
+    communities: communities.length,
+    events: events.length,
+    other: other.length,
+  };
 
   return (
-    <div className="relative">
-      <ResourceCard
-        scored={card.anchor}
-        variant={variant}
-        onClickTrack={(id) => onClickTrack(id, 0)}
+    <div className="flex flex-col gap-4">
+      {/* Inner tabs */}
+      {visibleTabs.length > 1 && (
+        <div className="flex border-b border-border">
+          {visibleTabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => { setTab(t.id); setSearch(""); }}
+              className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
+                tab === t.id
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.label}
+              <span className={`ml-1.5 text-xs ${tab === t.id ? "text-muted-foreground" : "text-muted"}`}>
+                {tabCounts[t.id]}
+              </span>
+              {tab === t.id && (
+                <motion.div
+                  layoutId="connect-tab-indicator"
+                  className="absolute inset-x-0 -bottom-px h-0.5 bg-accent"
+                  transition={{ duration: 0.2 }}
+                />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Search */}
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder={`Search ${tab === "communities" ? "communities" : tab === "events" ? "events" : "resources"}...`}
       />
 
-      {extras.length > 0 && (
-        <div className="relative mt-[-4px] ml-2 mr-2">
-          {!expanded && (
-            <div className="absolute inset-x-1 top-0 h-3 rounded-b-xl border border-t-0 border-border bg-card/60" />
-          )}
+      {/* Filters row */}
+      <div className="flex flex-wrap items-center gap-3">
+        <FilterChips options={LOCATION_FILTERS} value={locationFilter} onChange={setLocationFilter} />
 
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              const willExpand = !expanded;
-              setExpanded(willExpand);
-              if (willExpand) trackStackExpanded(variant, extras.length);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setExpanded((v) => !v);
-              }
-            }}
-            className="relative z-10 mt-1 flex w-full cursor-pointer items-center justify-between rounded-b-xl border border-t-0 border-border bg-card/80 px-4 py-2.5 text-left transition-colors hover:bg-card-hover"
-          >
-            <span className="text-xs text-muted-foreground">
-              {extras.length} more {label}
-              {geo && (
-                <>
-                  {" "}near
-                  <LocationPicker
-                    geo={geo}
-                    onLocationChange={onLocationChange}
-                  />
-                </>
-              )}
-            </span>
-            <motion.span
-              animate={{ rotate: expanded ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-              className="text-xs text-muted-foreground"
+        {tab === "events" && (
+          <div className="ml-auto">
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortId)}
+              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-accent"
             >
-              ↓
-            </motion.span>
+              <option value="relevance">Soonest</option>
+              <option value="quickest">Quickest</option>
+            </select>
           </div>
+        )}
+      </div>
 
-          <AnimatePresence>
-            {expanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.25, ease: "easeInOut" }}
-                className="overflow-hidden"
-              >
-                <div className="flex flex-col gap-2 pt-2">
-                  {extras.map((scored) => (
-                    <ResourceCard
-                      key={scored.resource.id}
-                      scored={scored}
-                      variant={variant}
-                      onClickTrack={(id) => onClickTrack(id, 1)}
-                    />
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+      {/* Location context */}
+      {locationFilter === "near" && geo && (
+        <div className="flex items-center text-xs text-muted-foreground">
+          <span>Showing results near</span>
+          <LocationPicker geo={geo} onLocationChange={onLocationChange} />
         </div>
       )}
 
-      {extras.length === 0 && geo && (
-        <div className="mt-[-4px] ml-2 mr-2">
-          <div className="rounded-b-xl border border-t-0 border-border bg-card/80 px-4 py-2 text-xs text-muted-foreground">
-            Near{" "}
-            <LocationPicker geo={geo} onLocationChange={onLocationChange} />
-          </div>
+      {/* Count */}
+      <p className="text-xs text-muted">
+        {filtered.length} {filtered.length === 1 ? "result" : "results"}
+      </p>
+
+      {/* Results */}
+      <ResourceList
+        resources={filtered}
+        variant={variant}
+        onClickTrack={onClickTrack}
+        highlightFirst={!search}
+      />
+    </div>
+  );
+}
+
+// ─── Learn Explorer ───────────────────────────────────────────
+
+type LearnTab = "quick" | "courses";
+
+const LEARN_TABS: { id: LearnTab; label: string }[] = [
+  { id: "quick", label: "Quick reads & tools" },
+  { id: "courses", label: "Courses & programs" },
+];
+
+interface LearnExplorerProps {
+  resources: Resource[];
+  variant: Variant;
+  onClickTrack: (resourceId: string, position: number) => void;
+}
+
+function LearnExplorer({ resources, variant, onClickTrack }: LearnExplorerProps) {
+  const [search, setSearch] = useState("");
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("any");
+
+  const quickReads = useMemo(
+    () => resources.filter((r) => r.min_minutes < 60),
+    [resources]
+  );
+  const courses = useMemo(
+    () => resources.filter((r) => r.min_minutes >= 60),
+    [resources]
+  );
+
+  // Default to whichever tab actually has content
+  const defaultTab: LearnTab = quickReads.length > 0 ? "quick" : "courses";
+  const [tab, setTab] = useState<LearnTab>(defaultTab);
+
+  // If the current tab has no content, switch to the one that does
+  useEffect(() => {
+    if (tab === "quick" && quickReads.length === 0 && courses.length > 0) {
+      setTab("courses");
+    } else if (tab === "courses" && courses.length === 0 && quickReads.length > 0) {
+      setTab("quick");
+    }
+  }, [tab, quickReads.length, courses.length]);
+
+  // Visible tabs (hide empty)
+  const visibleTabs = useMemo(() => {
+    const tabs: { id: LearnTab; label: string }[] = [];
+    if (quickReads.length > 0) tabs.push(LEARN_TABS[0]);
+    if (courses.length > 0) tabs.push(LEARN_TABS[1]);
+    return tabs;
+  }, [quickReads.length, courses.length]);
+
+  const pool = tab === "quick" ? quickReads : courses;
+
+  const filtered = useMemo(() => {
+    let items = pool;
+
+    if (search) {
+      items = items.filter((r) => matchesSearch(r, search));
+    }
+
+    if (timeFilter === "quick") {
+      items = items.filter((r) => r.min_minutes < 60);
+    } else if (timeFilter === "deep") {
+      items = items.filter((r) => r.min_minutes >= 480);
+    }
+
+    return [...items].sort(sortByImpact);
+  }, [pool, search, timeFilter]);
+
+  const tabCounts: Record<LearnTab, number> = {
+    quick: quickReads.length,
+    courses: courses.length,
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Inner tabs */}
+      {visibleTabs.length > 1 && (
+        <div className="flex border-b border-border">
+          {visibleTabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => { setTab(t.id); setSearch(""); setTimeFilter("any"); }}
+              className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
+                tab === t.id
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.label}
+              <span className={`ml-1.5 text-xs ${tab === t.id ? "text-muted-foreground" : "text-muted"}`}>
+                {tabCounts[t.id]}
+              </span>
+              {tab === t.id && (
+                <motion.div
+                  layoutId="learn-tab-indicator"
+                  className="absolute inset-x-0 -bottom-px h-0.5 bg-accent"
+                  transition={{ duration: 0.2 }}
+                />
+              )}
+            </button>
+          ))}
         </div>
       )}
+
+      {/* Search */}
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder={`Search ${tab === "quick" ? "resources" : "courses"}...`}
+      />
+
+      {/* Time filter (only for courses tab) */}
+      {tab === "courses" && (
+        <FilterChips options={TIME_FILTERS} value={timeFilter} onChange={setTimeFilter} />
+      )}
+
+      {/* Count */}
+      <p className="text-xs text-muted">
+        {filtered.length} {filtered.length === 1 ? "result" : "results"}
+      </p>
+
+      {/* Results */}
+      <ResourceList
+        resources={filtered}
+        variant={variant}
+        onClickTrack={onClickTrack}
+        highlightFirst={!search}
+      />
+    </div>
+  );
+}
+
+// ─── Simple Explorer (quick, act, career) ─────────────────────
+
+interface SimpleExplorerProps {
+  resources: Resource[];
+  variant: Variant;
+  onClickTrack: (resourceId: string, position: number) => void;
+}
+
+function SimpleExplorer({ resources, variant, onClickTrack }: SimpleExplorerProps) {
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortId>("relevance");
+
+  const filtered = useMemo(() => {
+    let items = resources;
+    if (search) {
+      items = items.filter((r) => matchesSearch(r, search));
+    }
+    return applySortToResources(items, sort);
+  }, [resources, search, sort]);
+
+  // Only show search if there are enough items to warrant it
+  const showSearch = resources.length > 4;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {showSearch && (
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search..."
+        />
+      )}
+
+      {showSearch && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted">
+            {filtered.length} {filtered.length === 1 ? "result" : "results"}
+          </p>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortId)}
+            className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-accent"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.id} value={o.id}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <ResourceList
+        resources={filtered}
+        variant={variant}
+        onClickTrack={onClickTrack}
+        highlightFirst={!search}
+      />
     </div>
   );
 }

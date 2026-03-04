@@ -25,7 +25,7 @@ import type {
   GeoData,
 } from "@/types";
 
-type Step = "home" | "questions" | "processing" | "results";
+type Step = "home" | "questions" | "processing" | "results" | "browse";
 
 const VARIANTS: Variant[] = ["A", "B", "C"];
 
@@ -112,11 +112,7 @@ export default function Home() {
 
   function handleProfileSkip() {
     trackProfileSkipped(variant);
-    const newAnswers: UserAnswers = { time: "significant" };
-    setAnswers(newAnswers);
-    sessionStorage.setItem("hdih_answers", JSON.stringify(newAnswers));
-    sessionStorage.setItem("hdih_variant", variant);
-    goTo("results");
+    goTo("browse");
   }
 
   // ─── Variant C: Q1 answer handler ────────────────────────
@@ -185,6 +181,18 @@ export default function Home() {
           profileText={processingProfileText}
           onComplete={handleProcessingComplete}
         />
+        <VariantSelector
+          variant={variant}
+          onVariantChange={handleVariantChange}
+        />
+      </>
+    );
+  }
+
+  if (step === "browse") {
+    return (
+      <>
+        <BrowseResults variant={variant} />
         <VariantSelector
           variant={variant}
           onVariantChange={handleVariantChange}
