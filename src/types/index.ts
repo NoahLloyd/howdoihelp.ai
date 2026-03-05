@@ -195,6 +195,31 @@ export interface RecommendedResource {
   title?: string;
 }
 
+// ─── Guide Recommendations ──────────────────────────────────
+
+export interface GuideRecommendation {
+  guideId: string;
+  rank: number;
+  description: string;
+  guide: {
+    id: string;
+    display_name: string | null;
+    avatar_url: string | null;
+    headline: string | null;
+    bio: string | null;
+    topics: string[];
+    calendar_link: string;
+    location: string | null;
+    is_available_in_person: boolean;
+    preferred_career_stages: string[];
+    preferred_backgrounds: string[];
+    languages: string[];
+    linkedin_url: string | null;
+    website_url: string | null;
+    booking_mode: "direct" | "approval_required";
+  };
+}
+
 // ─── API Usage ──────────────────────────────────────────────
 
 export interface ApiUsageEntry {

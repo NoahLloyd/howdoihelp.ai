@@ -50,6 +50,7 @@ async function fetchGuides(): Promise<PublicGuide[]> {
       languages: (g.languages as string[]) || [],
       linkedin_url: g.linkedin_url as string | null,
       website_url: g.website_url as string | null,
+      booking_mode: (g.booking_mode as "direct" | "approval_required") || "direct",
     };
   });
 }

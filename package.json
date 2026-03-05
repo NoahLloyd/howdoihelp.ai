@@ -24,6 +24,7 @@
     "posthog-js": "^1.356.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "resend": "^6.9.3",
     "tw-shimmer": "^0.4.7"
   },
   "devDependencies": {

@@ -16,6 +16,7 @@ export interface PublicGuide {
   languages: string[];
   linkedin_url: string | null;
   website_url: string | null;
+  booking_mode: "direct" | "approval_required";
 }
 
 export async function GET(request: Request) {
@@ -68,6 +69,7 @@ export async function GET(request: Request) {
       languages: (g.languages as string[]) || [],
       linkedin_url: g.linkedin_url as string | null,
       website_url: g.website_url as string | null,
+      booking_mode: (g.booking_mode as "direct" | "approval_required") || "direct",
     };
   });
 

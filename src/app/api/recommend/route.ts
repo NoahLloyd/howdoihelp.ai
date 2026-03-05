@@ -6,7 +6,9 @@ import type {
   GeoData,
   Resource,
   RecommendedResource,
+  GuideRecommendation,
 } from "@/types";
+import type { PublicGuide } from "@/app/api/guides/route";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +21,9 @@ You will receive:
 2. Their answers to our intake questions — how much time they can commit and what they're looking for
 3. Their geographic location
 4. A list of available resources (events, communities, programs, letters, and other actions)
+5. Optionally, a list of available guides — real people who volunteer to have 1:1 calls with newcomers to AI safety
 
-Your job is to rank the resources from most to least relevant FOR THIS SPECIFIC PERSON and write a personalized description for each one.
+Your job is to rank the resources from most to least relevant FOR THIS SPECIFIC PERSON and write a personalized description for each one. You may also recommend a guide if there's a strong match.
 
 ## CRITICAL: Profile Data Quality Warning
 
@@ -39,9 +42,21 @@ Use your best judgment to determine what is actually true about this person. Loo
 - **Match intent**: If they said "understand the problem", prioritize educational content. If they said "find others who care", prioritize communities and events.
 - **Be honest**: If something is a weak match, rank it lower. Don't try to make everything sound great.
 
+## Guide Recommendations
+
+If guides are available, you may recommend ONE guide alongside the resources. Only recommend a guide when there is a genuinely strong match based on:
+- The guide's topics align with what this person needs
+- The guide's preferred career stages / backgrounds match this person
+- The guide's "best for" description fits this person
+- The guide did NOT say this person would be "not a good fit"
+
+If no guide is a strong match, do NOT include one. A bad match wastes both people's time.
+
+When you do recommend a guide, include it as a separate object in the JSON with "guideId" instead of "resourceId". Give it a rank position where it naturally fits among the resources (often rank 2-4). Write a personalized description explaining why this specific guide would be valuable for this specific person.
+
 ## Output Rules
 
-1. **Return exactly 4 to 6 items.** Not more, not less. Pick the absolute best matches for this person.
+1. **Return exactly 4 to 6 resource items** plus optionally 1 guide. Pick the absolute best matches for this person.
 2. **At most 1 event or community — often zero.** Events (category "events") and communities (category "communities") are displayed in a special grouped card in the UI — you pick the single best one (if any), and all other nearby events/communities auto-populate beneath it. So you must NEVER include more than one event or community in your output.
    - For many users — especially those deeper into AI safety, technical contributors, or people with significant time — a fellowship, course, or career resource is far more impactful than an event. In these cases, include ZERO events/communities.
    - Only include an event/community when it's a genuinely strong match (e.g. a nearby conference in their exact field, or someone new to the space who would benefit from connecting with others).
@@ -51,23 +66,103 @@ Use your best judgment to determine what is actually true about this person. Loo
 
 ## Output Format
 
-Each element in the JSON array:
+For resources:
 {
   "resourceId": "the-resource-id",
   "rank": 1,
-  "description": "A personalized 1-2 sentence description of this resource, tailored to this specific person.",
+  "description": "A personalized 1-2 sentence description.",
   "title": "Optional custom title"
+}
+
+For a guide (optional, at most 1):
+{
+  "guideId": "the-guide-id",
+  "rank": 3,
+  "description": "A personalized 1-2 sentence description of why talking to this guide would help."
 }
 
 ### description
 Write a personalized description (1 sentence, sometimes 2) that is heavily inspired by the resource's existing description but rewritten to speak directly to this person. Weave in specific details from their profile — their job, skills, company, background — to make it feel personal. For example, instead of "A research program for aspiring alignment researchers", write "A 10-week research sprint where your ML engineering experience at DeepMind would be a huge asset." The description should make the person feel like this resource was hand-picked for them.
 
-### title (optional)
-Only include a "title" field if you think a custom title would be more compelling for this specific user than the existing one. Otherwise, omit "title" entirely and the existing title will be used. For example, you might customize a generic title like "AI Safety Newsletter" to "Weekly AI Safety Digest for Engineers" for a software engineer.
+For guides, write something like "Sarah transitioned from software engineering to alignment research two years ago and mentors people making the same switch. Your ML background at Google makes you exactly who she's looking to help."
+
+### title (optional, resources only)
+Only include a "title" field if you think a custom title would be more compelling for this specific user than the existing one. Otherwise, omit "title" entirely and the existing title will be used.
 
 IMPORTANT: Write in second person ("you", "your"). Be specific and reference their actual job title, company, skills, or background. Never be generic.
 
 IMPORTANT: Never use em dashes in titles or descriptions. Use commas, periods, or semicolons instead.`;
+
+// ─── Guide Fetcher ──────────────────────────────────────────
+
+interface GuideWithProfile {
+  id: string;
+  display_name: string | null;
+  headline: string | null;
+  bio: string | null;
+  topics: string[];
+  best_for: string | null;
+  not_a_good_fit: string | null;
+  location: string | null;
+  preferred_career_stages: string[];
+  preferred_backgrounds: string[];
+  preferred_experience_level: string[];
+  languages: string[];
+  calendar_link: string;
+  booking_mode: string;
+  avatar_url: string | null;
+  linkedin_url: string | null;
+  website_url: string | null;
+  is_available_in_person: boolean;
+}
+
+async function fetchActiveGuides(): Promise<GuideWithProfile[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  const { data: guides } = await supabase
+    .from("guides")
+    .select("*")
+    .eq("status", "active")
+    .not("calendar_link", "is", null)
+    .neq("calendar_link", "");
+
+  if (!guides || guides.length === 0) return [];
+
+  const guideIds = guides.map((g: { id: string }) => g.id);
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, display_name, avatar_url, bio")
+    .in("id", guideIds);
+
+  const profileMap = new Map(
+    (profiles || []).map((p: { id: string; display_name: string | null; avatar_url: string | null; bio: string | null }) => [p.id, p])
+  );
+
+  return guides.map((g: Record<string, unknown>): GuideWithProfile => {
+    const p = profileMap.get(g.id as string) as { display_name: string | null; avatar_url: string | null; bio: string | null } | undefined;
+    return {
+      id: g.id as string,
+      display_name: p?.display_name ?? null,
+      headline: g.headline as string | null,
+      bio: p?.bio ?? null,
+      topics: (g.topics as string[]) || [],
+      best_for: g.best_for as string | null,
+      not_a_good_fit: g.not_a_good_fit as string | null,
+      location: g.location as string | null,
+      preferred_career_stages: (g.preferred_career_stages as string[]) || [],
+      preferred_backgrounds: (g.preferred_backgrounds as string[]) || [],
+      preferred_experience_level: (g.preferred_experience_level as string[]) || [],
+      languages: (g.languages as string[]) || [],
+      calendar_link: g.calendar_link as string,
+      booking_mode: (g.booking_mode as string) || "direct",
+      avatar_url: p?.avatar_url ?? null,
+      linkedin_url: g.linkedin_url as string | null,
+      website_url: g.website_url as string | null,
+      is_available_in_person: (g.is_available_in_person as boolean) || false,
+    };
+  });
+}
 
 // ─── Request Handler ─────────────────────────────────────────
 
@@ -88,8 +183,11 @@ export async function POST(req: Request) {
       return Response.json({ error: "resources required" }, { status: 400 });
     }
 
+    // Fetch guides in parallel with prompt building
+    const guides = await fetchActiveGuides();
+
     // Build the user prompt with all context
-    const userPrompt = buildUserPrompt(profile, answers, geo, resources);
+    const userPrompt = buildUserPrompt(profile, answers, geo, resources, guides);
 
     const result = await llmComplete({
       task: "recommend",
@@ -102,10 +200,44 @@ export async function POST(req: Request) {
     const jsonStr = extractJson(result.text);
 
     let recommendations: RecommendedResource[];
+    let guideRecommendation: GuideRecommendation | undefined;
+
     try {
       const parsed = JSON.parse(jsonStr);
-      // Normalize: handle old-format responses that have reasoning/personalFit instead of description
-      recommendations = (parsed as Record<string, unknown>[]).map((item) => {
+      recommendations = [];
+
+      for (const item of parsed as Record<string, unknown>[]) {
+        // Guide recommendation
+        if (item.guideId) {
+          const guide = guides.find((g) => g.id === item.guideId);
+          if (guide) {
+            guideRecommendation = {
+              guideId: item.guideId as string,
+              rank: item.rank as number,
+              description: (item.description as string) || "",
+              guide: {
+                id: guide.id,
+                display_name: guide.display_name,
+                avatar_url: guide.avatar_url,
+                headline: guide.headline,
+                bio: guide.bio,
+                topics: guide.topics,
+                calendar_link: guide.calendar_link,
+                location: guide.location,
+                is_available_in_person: guide.is_available_in_person,
+                preferred_career_stages: guide.preferred_career_stages,
+                preferred_backgrounds: guide.preferred_backgrounds,
+                languages: guide.languages,
+                linkedin_url: guide.linkedin_url,
+                website_url: guide.website_url,
+                booking_mode: guide.booking_mode as "direct" | "approval_required",
+              },
+            };
+            continue;
+          }
+        }
+
+        // Resource recommendation
         const rec: RecommendedResource = {
           resourceId: item.resourceId as string,
           rank: item.rank as number,
@@ -115,8 +247,8 @@ export async function POST(req: Request) {
             "",
         };
         if (item.title) rec.title = item.title as string;
-        return rec;
-      });
+        recommendations.push(rec);
+      }
     } catch {
       console.error("[recommend] Failed to parse LLM response:", result.text.slice(0, 300));
       return Response.json({ error: "Failed to parse recommendations" }, { status: 500 });
@@ -142,6 +274,7 @@ export async function POST(req: Request) {
 
     return Response.json({
       recommendations,
+      guideRecommendation,
       usage: {
         inputTokens: usage.input_tokens,
         outputTokens: usage.output_tokens,
@@ -160,7 +293,8 @@ function buildUserPrompt(
   profile: EnrichedProfile | undefined,
   answers: UserAnswers,
   geo: GeoData,
-  resources: Resource[]
+  resources: Resource[],
+  guides: GuideWithProfile[]
 ): string {
   // Build profile section
   const profileLines: string[] = [];
@@ -241,6 +375,25 @@ function buildUserPrompt(
     return `[${r.id}] "${r.title}" — ${r.description} (${tags.join(", ")})`;
   });
 
+  // Build guides section
+  let guidesSection = "";
+  if (guides.length > 0) {
+    const guideLines = guides.map((g) => {
+      const parts = [`[${g.id}] "${g.display_name || "Guide"}"${g.headline ? ` — ${g.headline}` : ""}`];
+      if (g.topics.length > 0) parts.push(`  Topics: ${g.topics.join(", ")}`);
+      if (g.best_for) parts.push(`  Best for: ${g.best_for}`);
+      if (g.not_a_good_fit) parts.push(`  NOT a good fit for: ${g.not_a_good_fit}`);
+      if (g.preferred_career_stages.length > 0) parts.push(`  Preferred career stages: ${g.preferred_career_stages.join(", ")}`);
+      if (g.preferred_backgrounds.length > 0) parts.push(`  Preferred backgrounds: ${g.preferred_backgrounds.join(", ")}`);
+      if (g.location) parts.push(`  Location: ${g.location}`);
+      if (g.languages.length > 1) parts.push(`  Languages: ${g.languages.join(", ")}`);
+      return parts.join("\n");
+    });
+    guidesSection = `\n\n<available_guides>
+${guideLines.join("\n\n")}
+</available_guides>`;
+  }
+
   return `<user_profile>
 ${profileLines.join("\n")}
 </user_profile>
@@ -255,7 +408,7 @@ ${geoLines.join("\n")}
 
 <available_resources>
 ${resourceLines.join("\n\n")}
-</available_resources>
+</available_resources>${guidesSection}
 
-Pick the 4-6 BEST resources for this specific person. Include at most 1 event or community. Return a JSON array ordered by rank (1 = best match).`;
+Pick the 4-6 BEST resources for this specific person. Include at most 1 event or community.${guides.length > 0 ? " You may also include 1 guide if there's a strong match." : ""} Return a JSON array ordered by rank (1 = best match).`;
 }

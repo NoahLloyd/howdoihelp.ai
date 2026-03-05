@@ -18,13 +18,15 @@ import type {
   ScoredResource,
   LocalCard,
   RecommendedResource,
+  GuideRecommendation,
 } from "@/types";
 
 // ─── Types ──────────────────────────────────────────────────
 
 export type ResultItem =
   | { kind: "resource"; scored: ScoredResource; customDescription?: string }
-  | { kind: "local"; card: LocalCard | null };
+  | { kind: "local"; card: LocalCard | null }
+  | { kind: "guide"; recommendation: GuideRecommendation };
 
 type InputType = "linkedin" | "github" | "name" | "other_url" | "x" | "instagram";
 
@@ -600,6 +602,7 @@ export function ProcessingFlow({
 
       const data = await res.json();
       const recs: RecommendedResource[] = data.recommendations || [];
+      const guideRec: GuideRecommendation | undefined = data.guideRecommendation;
 
       // Separate event/community from other recommendations
       const merged: ResultItem[] = [];
@@ -646,6 +649,12 @@ export function ProcessingFlow({
         merged.splice(insertIdx, 0, localItem);
       }
       // When Claude doesn't recommend an event/community, don't show the local card at all
+
+      // Insert guide recommendation at its rank position
+      if (guideRec) {
+        const guideIdx = Math.min(guideRec.rank - 1, merged.length);
+        merged.splice(guideIdx, 0, { kind: "guide", recommendation: guideRec });
+      }
 
       return merged.length > 0
         ? merged
