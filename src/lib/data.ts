@@ -2,15 +2,27 @@ import { getSupabase } from "./supabase";
 import { resources as localResources } from "@/data/resources";
 import type { Resource, Variant, UserAnswers } from "@/types";
 
+/** Check if a resource's date (event_date or deadline_date) has passed */
+function isPastDate(resource: Resource): boolean {
+  const today = new Date().toISOString().slice(0, 10);
+  if (resource.event_date && resource.event_date < today) return true;
+  if (resource.deadline_date && resource.deadline_date < today) return true;
+  return false;
+}
+
 /**
  * Fetch all enabled, approved resources from Supabase.
+ * Filters out events/programs whose dates have already passed.
  * Falls back to local seed data if Supabase isn't configured or fails.
  */
 export async function fetchResources(): Promise<Resource[]> {
   const supabase = getSupabase();
 
+  const filterActive = (resources: Resource[]) =>
+    resources.filter((r) => r.enabled && r.status === "approved" && !isPastDate(r));
+
   if (!supabase) {
-    return localResources.filter((r) => r.enabled && r.status === "approved");
+    return filterActive(localResources);
   }
 
   try {
@@ -23,13 +35,13 @@ export async function fetchResources(): Promise<Resource[]> {
 
     if (error) {
       console.error("Supabase fetch error, falling back to local:", error.message);
-      return localResources.filter((r) => r.enabled && r.status === "approved");
+      return filterActive(localResources);
     }
 
-    return (data as Resource[]) || localResources.filter((r) => r.enabled && r.status === "approved");
+    return filterActive((data as Resource[]) || localResources);
   } catch (err) {
     console.error("Supabase connection error, falling back to local:", err);
-    return localResources.filter((r) => r.enabled && r.status === "approved");
+    return filterActive(localResources);
   }
 }
 

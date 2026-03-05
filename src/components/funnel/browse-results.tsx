@@ -77,15 +77,6 @@ function assignPath(resource: Resource): PathId {
   }
 }
 
-/** Filter out events whose date has already passed */
-function isNotPastEvent(resource: Resource): boolean {
-  if (!resource.event_date) return true;
-  const eventDate = new Date(resource.event_date);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return eventDate >= today;
-}
-
 function sortByImpact(a: Resource, b: Resource): number {
   const ratioA = a.ev_general / Math.max(a.friction, 0.01);
   const ratioB = b.ev_general / Math.max(b.friction, 0.01);
@@ -204,15 +195,14 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
         fetchResources(),
         getGeoData(),
       ]);
-      const activeResources = resources.filter(isNotPastEvent);
-      setAllResources(activeResources);
+      setAllResources(resources);
       setGeo(geoData);
       identifyGeo(geoData.countryCode);
       loadedAtRef.current = Date.now();
 
       trackResultsViewed(
         variant, "significant", undefined, false, undefined,
-        activeResources.length, "browse"
+        resources.length, "browse"
       );
       setLoading(false);
     }
