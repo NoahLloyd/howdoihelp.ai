@@ -20,19 +20,22 @@ import type {
   ScoredResource,
   LocalCard,
   RecommendedResource,
+  GuideRecommendation,
 } from "@/types";
 import { ResourceCard } from "@/components/results/resource-card";
+import { GuideCard } from "@/components/results/guide-card";
 import { LocationPicker } from "@/components/results/location-picker";
 
-/** A result item is either a normal scored resource or the local card */
+/** A result item is either a normal scored resource, the local card, or a guide recommendation */
 type ResultItem =
   | { kind: "resource"; scored: ScoredResource; customDescription?: string }
-  | { kind: "local"; card: LocalCard | null };
+  | { kind: "local"; card: LocalCard | null }
+  | { kind: "guide"; recommendation: GuideRecommendation };
 
 interface ResultsProps {
   variant: Variant;
   answers: UserAnswers;
-  /** Pre-computed items from ProcessingFlow (Variant A) — skips init when provided */
+  /** Pre-computed items from ProcessingFlow (Variant A) - skips init when provided */
   precomputedItems?: ResultItem[];
   /** Pre-computed geo from ProcessingFlow */
   precomputedGeo?: GeoData;
@@ -133,6 +136,7 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
 
       const data = await res.json();
       const recs: RecommendedResource[] = data.recommendations || [];
+      const guideRec: GuideRecommendation | undefined = data.guideRecommendation;
 
       // Separate event/community from other recommendations
       const merged: ResultItem[] = [];
@@ -179,6 +183,12 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
         });
       }
       // When Claude doesn't recommend an event/community, don't show the local card at all
+
+      // Insert guide recommendation at its rank position
+      if (guideRec) {
+        const guideIdx = Math.min(guideRec.rank - 1, merged.length);
+        merged.splice(guideIdx, 0, { kind: "guide", recommendation: guideRec });
+      }
 
       return merged.length > 0
         ? merged
@@ -347,7 +357,9 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
                 const key =
                   item.kind === "resource"
                     ? item.scored.resource.id
-                    : "local-card";
+                    : item.kind === "guide"
+                      ? `guide-${item.recommendation.guideId}`
+                      : "local-card";
                 return (
                   <motion.div
                     key={key}
@@ -406,6 +418,15 @@ function ResultItemRenderer({
     );
   }
 
+  if (item.kind === "guide") {
+    return (
+      <GuideCard
+        recommendation={item.recommendation}
+        isPrimary={isPrimary}
+      />
+    );
+  }
+
   return (
     <ResourceCard
       scored={item.scored}
@@ -450,7 +471,7 @@ function LocalCardGroup({ card, variant, geo, onClickTrack, onLocationChange }: 
         : "communities & events";
 
   if (!card) {
-    // Empty state — no events/communities at this location
+    // Empty state - no events/communities at this location
     return (
       <div className="rounded-xl border border-border bg-card px-5 py-5">
         <p className="text-sm text-muted-foreground">
@@ -532,7 +553,7 @@ function LocalCardGroup({ card, variant, geo, onClickTrack, onLocationChange }: 
         </div>
       )}
 
-      {/* No extras but has anchor — show location in a subtle footer */}
+      {/* No extras but has anchor - show location in a subtle footer */}
       {extras.length === 0 && geo && (
         <div className="mt-[-4px] ml-2 mr-2">
           <div className="rounded-b-xl border border-t-0 border-border bg-card/80 px-4 py-2 text-xs text-muted-foreground">

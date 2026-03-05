@@ -1,5 +1,5 @@
 /**
- * gather-eventbrite.ts — Searches Eventbrite for AI safety related events.
+ * gather-eventbrite.ts - Searches Eventbrite for AI safety related events.
  *
  * Uses Eventbrite's public search endpoint (no API key needed for basic search).
  * Falls back to HTML scraping if the API response format changes.
@@ -240,7 +240,7 @@ async function main() {
   if (rejected.length > 0) {
     console.log(`\n🚫 Pre-filter rejected ${rejected.length} irrelevant events:`);
     for (const r of rejected) {
-      console.log(`   ✗ "${r.event.title}" — ${r.reason}`);
+      console.log(`   ✗ "${r.event.title}" - ${r.reason}`);
     }
   }
   console.log(`\n  ${kept.length} events passed pre-filter (${rejected.length} rejected).`);

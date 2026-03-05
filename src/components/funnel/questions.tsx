@@ -28,7 +28,7 @@ export function Questions({ variant, answers: initialAnswers, isPositioned, onCo
   const answeredRef = useRef(false);
   const questionStartRef = useRef(Date.now());
 
-  // Build question sequence — only used by Variant C
+  // Build question sequence - only used by Variant C
   // If positioned: position_type → intent
   // Otherwise: just intent (Q1 readiness was already answered on the home page)
   const questions: Question[] = isPositioned

@@ -1,5 +1,5 @@
 /**
- * gather-aisafety.ts — Fetches events from the AISafety.com Events & Training Airtable.
+ * gather-aisafety.ts - Fetches events from the AISafety.com Events & Training Airtable.
  *
  * AISafety.com maintains a curated Airtable of AI safety events:
  * https://airtable.com/appF8XfZUGXtfi40E/shrLgl03tMK4q6cyc/tblx0L8qJEaLBxJFS
@@ -9,7 +9,7 @@
  * 2. Calls Airtable's internal API with that signed URL to get structured data
  * 3. Maps the rows to GatheredEvent format
  *
- * No API key needed — uses the public shared view.
+ * No API key needed - uses the public shared view.
  *
  * Usage:
  *   npx tsx scripts/gatherers/gather-aisafety.ts
@@ -274,7 +274,7 @@ async function main() {
   const programsMode = process.argv.includes('--programs');
 
   const modeLabel = programsMode ? 'Programs' : 'Events';
-  console.log(`📡 AISafety.com Airtable Gatherer — ${modeLabel}${dryRun ? ' (DRY RUN)' : ''}\n`);
+  console.log(`📡 AISafety.com Airtable Gatherer - ${modeLabel}${dryRun ? ' (DRY RUN)' : ''}\n`);
 
   if (programsMode) {
     const programs = await gatherPrograms();

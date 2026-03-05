@@ -5,7 +5,7 @@ import { detectPlatform } from "@/lib/profile";
 export const dynamic = "force-dynamic";
 
 /**
- * Quick profile scrape — returns basic info (name, photo, headline) fast,
+ * Quick profile scrape - returns basic info (name, photo, headline) fast,
  * without waiting for Claude extraction. Used by the processing flow to
  * show immediate feedback while full enrichment runs in a follow-up call.
  */
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       return Response.json({ profile, platform });
     }
 
-    // Other platforms — try best-effort with crawler UAs
+    // Other platforms - try best-effort with crawler UAs
     const { profile } = await bestEffortFetch(url);
     return Response.json({ profile, platform });
   } catch (err) {

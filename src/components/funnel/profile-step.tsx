@@ -175,7 +175,7 @@ export function ProfileStep({ onSubmit, onSkip }: ProfileStepProps) {
       const inputType = getInputType(t);
       onSubmit(t, platform, inputType);
     } else {
-      // Name search — go to processing flow which will call Perplexity
+      // Name search - go to processing flow which will call Perplexity
       onSubmit(t, "other", "name");
     }
   }

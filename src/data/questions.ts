@@ -1,7 +1,7 @@
 import { Question, Variant } from "@/types";
 
 /**
- * Q1 — readiness/time commitment.
+ * Q1 - readiness/time commitment.
  * Used by Variant C as the landing question.
  */
 export const questionOne: Question = {
@@ -28,7 +28,7 @@ export const questionOne: Question = {
 };
 
 /**
- * Follow-up for people who chose "positioned" — what kind of position?
+ * Follow-up for people who chose "positioned" - what kind of position?
  */
 export const questionPositioned: Question = {
   id: "position_type",
@@ -58,7 +58,7 @@ export const questionPositioned: Question = {
 };
 
 /**
- * Q2 — intent. Used by Variant C after Q1.
+ * Q2 - intent. Used by Variant C after Q1.
  */
 export const questionTwo: Question = {
   id: "intent",

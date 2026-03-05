@@ -292,7 +292,7 @@ export function ResourceEditor({ resource, isNew, onSave, onDelete, onCancel }: 
               )}
             </section>
 
-            {/* Verification — communities only */}
+            {/* Verification - communities only */}
             {form.category === "communities" && (
               <section>
                 <h3 className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3 pb-1 border-b border-border">

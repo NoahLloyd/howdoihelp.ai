@@ -1,5 +1,5 @@
 /**
- * scrape-url.ts — Shared URL scraping utility for the event pipeline.
+ * scrape-url.ts - Shared URL scraping utility for the event pipeline.
  *
  * Fetches a URL, strips HTML, extracts structured metadata (OpenGraph, JSON-LD),
  * and returns clean text + metadata for the AI evaluator.

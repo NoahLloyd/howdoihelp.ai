@@ -1,12 +1,12 @@
 /**
- * pre-filter.ts — Whitelist-based filter that only keeps events with
+ * pre-filter.ts - Whitelist-based filter that only keeps events with
  * positive AI safety signals before they reach the AI evaluator.
  *
  * Logic: an event is kept ONLY if it contains at least one recognized
  * AI safety keyword/phrase or known organization name anywhere in its
  * title, description, or source_org. Everything else is rejected.
  *
- * This is intentionally generous — the AI evaluator handles nuance.
+ * This is intentionally generous - the AI evaluator handles nuance.
  * The goal is to filter out the 80%+ of results that are clearly
  * unrelated (generic tech meetups, business AI, crypto, etc.) without
  * ever dropping a legitimate safety event.
@@ -163,7 +163,7 @@ const SAFETY_PHRASES = [
   'technological singularity',
 ];
 
-/** Known AI safety organizations — long/unique names safe for substring matching */
+/** Known AI safety organizations - long/unique names safe for substring matching */
 const KNOWN_ORGS_SUBSTRING = [
   // Research labs & institutes
   'mats program',
@@ -239,7 +239,7 @@ const PHRASES_WORD_BOUNDARY = [
   'stop ai',     // AI pause/safety movement
 ];
 
-/** Short/ambiguous org names — must match as whole words to avoid false positives */
+/** Short/ambiguous org names - must match as whole words to avoid false positives */
 const KNOWN_ORGS_WORD_BOUNDARY = [
   'mats',       // not inside "formats"
   'cais',       // not inside "escalais"

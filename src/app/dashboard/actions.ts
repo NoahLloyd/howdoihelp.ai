@@ -80,6 +80,7 @@ export interface GuideData {
   languages: string[];
   not_a_good_fit: string | null;
   geographic_preference: string;
+  booking_mode: "direct" | "approval_required";
 }
 
 // ─── Avatar Upload ──────────────────────────────────────────

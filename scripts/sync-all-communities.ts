@@ -1,5 +1,5 @@
 /**
- * sync-all-communities.ts — The full community pipeline orchestrator.
+ * sync-all-communities.ts - The full community pipeline orchestrator.
  *
  * Runs the gatherer, then processes the queue through the AI evaluator.
  * This is the single command for autonomous community pipeline operation.
@@ -53,7 +53,7 @@ function runScript(scriptPath: string, extraArgs: string[] = []): Promise<{ succ
 async function main() {
   const startTime = Date.now();
   console.log('='.repeat(60));
-  console.log('  COMMUNITY PIPELINE — howdoihelp.ai');
+  console.log('  COMMUNITY PIPELINE - howdoihelp.ai');
   console.log(`  ${new Date().toISOString()}`);
   console.log('='.repeat(60));
 
@@ -86,7 +86,7 @@ async function main() {
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log('\n' + '='.repeat(60));
-  console.log(`  COMMUNITY PIPELINE COMPLETE — ${elapsed}s`);
+  console.log(`  COMMUNITY PIPELINE COMPLETE - ${elapsed}s`);
   console.log('='.repeat(60));
 }
 

@@ -8,7 +8,7 @@ function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
-    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY — add it to .env.local");
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY - add it to .env.local");
   }
   return createClient(url, key);
 }
@@ -69,7 +69,7 @@ export async function fetchResourcesByCategory(
   return (data as Resource[]) || [];
 }
 
-/** Public fetch — only approved + enabled resources. */
+/** Public fetch - only approved + enabled resources. */
 export async function fetchPublicResources(
   category: ResourceCategory
 ): Promise<Resource[]> {

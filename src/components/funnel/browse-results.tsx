@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import Link from "next/link";
+
 import { fetchResources, trackClick } from "@/lib/data";
 import { getGeoData } from "@/lib/geo";
 import {
@@ -21,7 +21,7 @@ import type {
 } from "@/types";
 import { ResourceCard } from "@/components/results/resource-card";
 import { LocationPicker } from "@/components/results/location-picker";
-import type { PublicGuide } from "@/app/api/guides/route";
+
 
 // ─── Path definitions ─────────────────────────────────────────
 
@@ -373,92 +373,9 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
           </motion.div>
         </AnimatePresence>
 
-        {/* Guide CTA — shown on career path */}
-        {activePath === "career" && <GuideCTA />}
-
         <div className="pb-8" />
       </div>
     </main>
-  );
-}
-
-// ─── Guide CTA Section ──────────────────────────────────────
-
-function GuideCTA() {
-  const [guides, setGuides] = useState<PublicGuide[]>([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/guides")
-      .then((r) => r.json())
-      .then((data) => {
-        setGuides((data.guides || []).slice(0, 3));
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
-  }, []);
-
-  if (!loaded || guides.length === 0) return null;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.3, duration: 0.4 }}
-      className="mt-10 rounded-2xl border border-accent/20 bg-accent/5 p-6"
-    >
-      <h3 className="text-base font-semibold text-foreground">
-        Want personalized guidance?
-      </h3>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Talk to someone who&apos;s been where you are. Free 30-minute video
-        calls.
-      </p>
-
-      <div className="mt-4 flex flex-col gap-3">
-        {guides.map((guide) => (
-          <a
-            key={guide.id}
-            href={guide.calendar_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 hover:border-accent/40 hover:bg-card-hover transition-all"
-          >
-            {guide.avatar_url ? (
-              <img
-                src={guide.avatar_url}
-                alt=""
-                className="h-10 w-10 rounded-full border border-border object-cover shrink-0"
-              />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-card-hover text-sm font-medium text-muted-foreground shrink-0">
-                {(guide.display_name || "?")[0]?.toUpperCase()}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">
-                {guide.display_name || "Guide"}
-              </p>
-              {guide.headline && (
-                <p className="text-xs text-muted-foreground truncate">
-                  {guide.headline}
-                </p>
-              )}
-            </div>
-            <span className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white">
-              Book
-            </span>
-          </a>
-        ))}
-      </div>
-
-      <Link
-        href="/guides"
-        className="mt-4 block text-center text-sm text-accent hover:text-accent-hover transition-colors font-medium"
-      >
-        See all guides
-      </Link>
-    </motion.div>
   );
 }
 

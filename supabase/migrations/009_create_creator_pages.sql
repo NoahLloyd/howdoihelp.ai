@@ -7,7 +7,7 @@ create table if not exists creator_pages (
   slug text unique not null,
   status text not null default 'draft' check (status in ('draft', 'active', 'paused')),
 
-  -- Flow configuration (JSONB) — ordered list of steps
+  -- Flow configuration (JSONB) - ordered list of steps
   flow_config jsonb not null default '[
     {"type": "welcome", "title": "You want to help.", "subtitle": "A few quick questions, then we''ll find the best ways for you to help with AI safety."},
     {"type": "questions", "useDefaults": true, "customQuestions": []},

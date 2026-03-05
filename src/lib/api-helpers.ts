@@ -48,7 +48,7 @@ export function handleCors(): Response {
   });
 }
 
-// Rate limit check — returns a 429 Response if exceeded, or null if allowed
+// Rate limit check - returns a 429 Response if exceeded, or null if allowed
 export function enforceRateLimit(
   request: Request
 ): { response: Response; rateLimit: null } | { response: null; rateLimit: RateLimitResult } {

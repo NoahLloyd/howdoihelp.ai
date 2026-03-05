@@ -72,7 +72,7 @@ export function trackProfileSkipped(variant: Variant) {
 
 // ─── Results Events ─────────────────────────────────────────
 
-/** Results page loaded — user sees recommendations. */
+/** Results page loaded - user sees recommendations. */
 export function trackResultsViewed(
   variant: Variant,
   time: TimeCommitment,

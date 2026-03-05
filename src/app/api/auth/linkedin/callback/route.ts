@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   const error = searchParams.get("error");
 
   if (error || !code) {
-    // User denied or something went wrong — redirect back to app
+    // User denied or something went wrong - redirect back to app
     redirect("/?linkedin_error=1");
   }
 
@@ -61,7 +61,7 @@ export async function GET(req: Request) {
     // Returns: { sub, name, given_name, family_name, picture, email, locale }
 
     // 3. Try /v2/me to get vanityName (profile URL slug)
-    //    This may or may not work with standard OIDC scopes — worth trying.
+    //    This may or may not work with standard OIDC scopes - worth trying.
     let vanityName: string | undefined;
     try {
       const meRes = await fetch("https://api.linkedin.com/v2/me", {
@@ -75,10 +75,10 @@ export async function GET(req: Request) {
           console.log("[linkedin-oauth] Got vanityName:", vanityName);
         }
       } else {
-        console.log("[linkedin-oauth] /v2/me returned", meRes.status, "— vanityName not available");
+        console.log("[linkedin-oauth] /v2/me returned", meRes.status, "- vanityName not available");
       }
     } catch {
-      console.log("[linkedin-oauth] /v2/me request failed — skipping");
+      console.log("[linkedin-oauth] /v2/me request failed - skipping");
     }
 
     // 4. If we have vanityName, scrape the full profile for rich data
@@ -115,7 +115,7 @@ export async function GET(req: Request) {
       };
     }
 
-    // 6. Enrich with Perplexity web search — adds context from across the web
+    // 6. Enrich with Perplexity web search - adds context from across the web
     let perplexityText: string | undefined;
     if (enrichedProfile.fullName) {
       try {
@@ -123,7 +123,7 @@ export async function GET(req: Request) {
           .filter(Boolean)
           .join(", ");
         const query = context
-          ? `"${enrichedProfile.fullName}" — ${context}`
+          ? `"${enrichedProfile.fullName}" - ${context}`
           : `"${enrichedProfile.fullName}"`;
         const { text } = await searchPerson(query);
         if (text) {
@@ -131,7 +131,7 @@ export async function GET(req: Request) {
           console.log("[linkedin-oauth] Perplexity enrichment added");
         }
       } catch {
-        console.log("[linkedin-oauth] Perplexity enrichment failed — continuing without it");
+        console.log("[linkedin-oauth] Perplexity enrichment failed - continuing without it");
       }
     }
 
@@ -144,14 +144,14 @@ export async function GET(req: Request) {
       httpOnly: false, // Frontend needs to read this
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 300, // 5 minutes — just long enough for the frontend to grab it
+      maxAge: 300, // 5 minutes - just long enough for the frontend to grab it
       path: "/",
     });
 
     // Redirect back to app with success flag
     redirect("/?linkedin_success=1");
   } catch (err) {
-    // redirect() throws a special error in Next.js — let it through
+    // redirect() throws a special error in Next.js - let it through
     if (err instanceof Error && err.message === "NEXT_REDIRECT") throw err;
     console.error("[linkedin-oauth] Unexpected error:", err);
     redirect("/?linkedin_error=unknown");

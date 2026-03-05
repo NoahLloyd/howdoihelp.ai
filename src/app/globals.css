@@ -2,13 +2,13 @@
 @import "tw-shimmer";
 
 /*
-  Light/dark mode — follows device preference via prefers-color-scheme.
+  Light/dark mode - follows device preference via prefers-color-scheme.
   All design tokens are CSS custom properties consumed by Tailwind's
   @theme block below.
 */
 
 :root {
-  /* Brand colors — adjust these to retheme the entire app */
+  /* Brand colors - adjust these to retheme the entire app */
   --primary: #0D9373;
   --primary-hover: #0B7D62;
   --background: #FAF8F5;

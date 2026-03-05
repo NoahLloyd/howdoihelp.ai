@@ -1,5 +1,5 @@
 /**
- * sync-programs.ts — The full programs pipeline orchestrator.
+ * sync-programs.ts - The full programs pipeline orchestrator.
  *
  * Runs the BlueDot gatherer to scrape courses and upcoming rounds.
  * (Evaluation phase can be added later when an evaluator is built.)
@@ -51,7 +51,7 @@ function runScript(scriptPath: string, extraArgs: string[] = []): Promise<{ succ
 async function main() {
   const startTime = Date.now();
   console.log('='.repeat(60));
-  console.log('  PROGRAMS PIPELINE — howdoihelp.ai');
+  console.log('  PROGRAMS PIPELINE - howdoihelp.ai');
   console.log(`  ${new Date().toISOString()}`);
   console.log('='.repeat(60));
 
@@ -74,7 +74,7 @@ async function main() {
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log('\n' + '='.repeat(60));
-  console.log(`  PROGRAMS PIPELINE COMPLETE — ${elapsed}s`);
+  console.log(`  PROGRAMS PIPELINE COMPLETE - ${elapsed}s`);
   console.log('='.repeat(60));
 }
 

@@ -37,7 +37,7 @@ export async function scrapeLinkedInProfile(url: string): Promise<{
     const textData = extractTextContent(html);
     const ogParsed = parseOgTags(ogData);
 
-    // Merge — prefer JSON-LD (richest) > OG > meta > text
+    // Merge - prefer JSON-LD (richest) > OG > meta > text
     const fullName =
       jsonLd.name ||
       ogParsed.name ||
@@ -79,11 +79,11 @@ export async function scrapeLinkedInProfile(url: string): Promise<{
 
     const photo = jsonLd.image || ogData.image || undefined;
 
-    // Clean HTML from summary — use OG description as fallback
+    // Clean HTML from summary - use OG description as fallback
     const rawSummary = jsonLd.description || textData.about || ogParsed.about || undefined;
     const summary = rawSummary?.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").trim() || undefined;
 
-    // Education — merge JSON-LD with text activities, fallback to OG-parsed
+    // Education - merge JSON-LD with text activities, fallback to OG-parsed
     let education = jsonLd.education.length > 0 ? jsonLd.education : textData.education;
     if (education.length === 0 && ogParsed.education) {
       education = [{ school: ogParsed.education }];
@@ -127,11 +127,11 @@ export async function scrapeLinkedInProfile(url: string): Promise<{
       skills.push(...jsonLd.languages.map((l) => `Language: ${l}`));
     }
 
-    // Volunteer work — shows values and interests
+    // Volunteer work - shows values and interests
     if (textData.volunteer.length > 0) {
       skills.push(...textData.volunteer.map((v) =>
         v.description
-          ? `Volunteer: ${v.role} at ${v.org} — ${v.description}`
+          ? `Volunteer: ${v.role} at ${v.org} - ${v.description}`
           : `Volunteer: ${v.role} at ${v.org}`
       ));
     }
@@ -143,7 +143,7 @@ export async function scrapeLinkedInProfile(url: string): Promise<{
       ));
     }
 
-    // Activity posts are other people's content the user liked/commented on —
+    // Activity posts are other people's content the user liked/commented on -
     // including them causes Claude to confuse those authors' work with this person.
     // Only use the About section for the summary.
     const fullSummary = summary || "";
@@ -327,7 +327,7 @@ function extractJsonLd(html: string): JsonLdResult {
           result.followers = Number(item.interactionStatistic.userInteractionCount);
         }
 
-        // Job title — LinkedIn returns an array of empty strings for hidden titles,
+        // Job title - LinkedIn returns an array of empty strings for hidden titles,
         // so only use if we find a non-empty one
         if (item.jobTitle) {
           const titles = Array.isArray(item.jobTitle) ? item.jobTitle : [item.jobTitle];
@@ -336,7 +336,7 @@ function extractJsonLd(html: string): JsonLdResult {
         }
       }
     } catch {
-      // Invalid JSON — skip
+      // Invalid JSON - skip
     }
   }
 
@@ -370,7 +370,7 @@ interface OgParsed {
   location?: string;
 }
 
-/** Parse structured data from OG tags — very reliable across all LinkedIn profiles */
+/** Parse structured data from OG tags - very reliable across all LinkedIn profiles */
 function parseOgTags(og: OgData): OgParsed {
   const result: OgParsed = {};
 
@@ -485,7 +485,7 @@ function extractTextContent(html: string): TextContent {
       .slice(0, 500);
   }
 
-  // Activity posts are skipped — they contain other people's content that the
+  // Activity posts are skipped - they contain other people's content that the
   // user merely liked/commented on, which confuses downstream extraction.
 
   // Education with activities/societies
@@ -596,7 +596,7 @@ function extractTextContent(html: string): TextContent {
 
   // Honors & Awards
   // Pattern: [name, issuer, date, optional description, name, issuer, date, ...]
-  // Description is tricky — it's optional and can look like another award name.
+  // Description is tricky - it's optional and can look like another award name.
   // We detect descriptions by checking if the next-next content line is an issuer (short org name)
   // vs another award title.
   const awardLines = findSection("Honors & Awards");
@@ -699,7 +699,7 @@ function buildCleanedText(html: string): string {
       l !== "-"
     );
 
-  // Strip the Activity section — it contains other people's posts that the
+  // Strip the Activity section - it contains other people's posts that the
   // user liked/commented on and confuses Claude into misidentifying the person.
   const activityStart = lines.findIndex((l) => l === "Activity" || l.startsWith("Activity"));
   const sectionHeaders = [
@@ -714,7 +714,7 @@ function buildCleanedText(html: string): string {
     if (activityEnd !== -1) {
       lines.splice(activityStart, activityEnd - activityStart);
     } else {
-      // Activity was the last section — remove everything after it
+      // Activity was the last section - remove everything after it
       lines.splice(activityStart);
     }
   }
@@ -727,7 +727,7 @@ function buildCleanedText(html: string): string {
     }
   }
 
-  // Truncate to ~8000 chars — enough for Claude to extract rich data while keeping costs low (~$0.002)
+  // Truncate to ~8000 chars - enough for Claude to extract rich data while keeping costs low (~$0.002)
   return deduped.join("\n").slice(0, 8000);
 }
 

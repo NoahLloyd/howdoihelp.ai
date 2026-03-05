@@ -1,5 +1,5 @@
 /**
- * insert-candidates.ts — Shared utility for inserting event candidates.
+ * insert-candidates.ts - Shared utility for inserting event candidates.
  *
  * All gatherers use this to insert into `event_candidates` with dedup.
  */
@@ -32,7 +32,7 @@ export function getSupabase(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
-    throw new Error('Missing SUPABASE env vars — check .env.local');
+    throw new Error('Missing SUPABASE env vars - check .env.local');
   }
   _supabase = createClient(url, key);
   return _supabase;

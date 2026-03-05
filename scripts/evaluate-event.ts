@@ -1,5 +1,5 @@
 /**
- * evaluate-event.ts — The central AI event evaluator.
+ * evaluate-event.ts - The central AI event evaluator.
  *
  * This is the single gatekeeper for the entire event pipeline. Nothing enters
  * the public `resources` table without passing through this script.
@@ -89,15 +89,15 @@ You must return ONLY a valid JSON object with these exact fields:
 }
 
 event_type options:
-- "conference" — multi-day conferences, summits
-- "meetup" — local community meetups, socials, coffee chats
-- "hackathon" — hackathons, alignment jams, build events
-- "workshop" — hands-on workshops, bootcamps, training sessions
-- "talk" — talks, lectures, presentations, panels
-- "social" — casual socials, dinners, happy hours
-- "course" — structured courses, reading groups, study groups
-- "fellowship" — research fellowships, residencies (e.g. MATS, PIBBSS, Interact)
-- "program" — structured programs, bootcamps, accelerators (e.g. BlueDot, AI Safety Camp)
+- "conference" - multi-day conferences, summits
+- "meetup" - local community meetups, socials, coffee chats
+- "hackathon" - hackathons, alignment jams, build events
+- "workshop" - hands-on workshops, bootcamps, training sessions
+- "talk" - talks, lectures, presentations, panels
+- "social" - casual socials, dinners, happy hours
+- "course" - structured courses, reading groups, study groups
+- "fellowship" - research fellowships, residencies (e.g. MATS, PIBBSS, Interact)
+- "program" - structured programs, bootcamps, accelerators (e.g. BlueDot, AI Safety Camp)
 - "other"
 
 Scoring guidelines:
@@ -114,7 +114,7 @@ impact_score guidelines:
 - 0.2-0.4: Small or routine events (regular coffee chats, casual socials)
 - 0.0-0.2: Minimal impact
 
-CRITICAL — Online event scoring:
+CRITICAL - Online event scoring:
 This directory helps people find events IN THEIR LOCAL CITY. Online events have no location advantage and are rarely specifically relevant to any individual user. Therefore:
 - Online events must be EXCEPTIONALLY noteworthy to get a high suggested_ev (e.g. a major virtual conference with top AI safety researchers, a MATS info session, an EAG virtual event)
 - Routine online meetups, webinars, and generic virtual talks should get suggested_ev <= 0.15 regardless of relevance
@@ -137,14 +137,14 @@ Date/time/location formatting:
 - For organization, use the most commonly recognized short name (e.g. "MATS" not "Machine Alignment Technical Safety program")
 
 DUPLICATE DETECTION:
-You may be given a list of existing events already in our database. If the candidate event is clearly the same event as one already listed — even if the title, URL, or description differs — set "duplicate_of" to the ID of the matching existing event.
+You may be given a list of existing events already in our database. If the candidate event is clearly the same event as one already listed - even if the title, URL, or description differs - set "duplicate_of" to the ID of the matching existing event.
 
 Signs of a duplicate:
 - Same event name/topic on the same date, possibly listed on different platforms (e.g. one on Eventbrite, one on Luma)
 - Same organization hosting the same type of event at the same time and location
 - Very similar descriptions for the same date/location, just worded differently
 
-Set duplicate_of to null if this is NOT a duplicate. When in doubt, it is NOT a duplicate — only flag clear matches.`;
+Set duplicate_of to null if this is NOT a duplicate. When in doubt, it is NOT a duplicate - only flag clear matches.`;
 
 interface ExistingEvent {
   id: string;
@@ -358,7 +358,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingEve
     return 'error';
   }
 
-  // Step 4: Store AI results — always use AI's standardized date/location
+  // Step 4: Store AI results - always use AI's standardized date/location
   await supabase
     .from('event_candidates')
     .update({
@@ -414,7 +414,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingEve
     return 'error';
   }
 
-  // Borderline — needs admin review
+  // Borderline - needs admin review
   await supabase
     .from('event_candidates')
     .update({ status: 'evaluated' })
@@ -593,7 +593,7 @@ async function evaluateSingleUrl(url: string) {
     return;
   }
 
-  // Not found — insert as a new candidate and evaluate
+  // Not found - insert as a new candidate and evaluate
   console.log('No existing candidate found. Creating new entry...\n');
 
   const candidateId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -674,7 +674,7 @@ async function main() {
     }
     await evaluateSingleDescription(title, description, date);
   } else {
-    console.log(`Event Evaluator — The AI gatekeeper for howdoihelp.ai
+    console.log(`Event Evaluator - The AI gatekeeper for howdoihelp.ai
 
 Usage:
   npx tsx scripts/evaluate-event.ts --url <URL>

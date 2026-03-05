@@ -1,5 +1,5 @@
 /**
- * evaluate-community.ts — The central AI community evaluator.
+ * evaluate-community.ts - The central AI community evaluator.
  *
  * This is the single gatekeeper for the community pipeline. Nothing enters
  * the public `resources` table without passing through this script.
@@ -81,17 +81,17 @@ You must return ONLY a valid JSON object with these exact fields:
 }
 
 community_type options:
-- "discord" — Discord servers
-- "meetup" — Meetup.com groups or regular in-person meetups
-- "facebook-group" — Facebook groups
-- "slack" — Slack workspaces
-- "telegram" — Telegram groups/channels
-- "whatsapp" — WhatsApp groups
-- "forum-group" — Forum-hosted local group pages (EA Forum, LessWrong)
-- "website" — Standalone website for a community/organization
-- "mailing-list" — Email lists, newsletters
-- "subreddit" — Reddit communities
-- "linkedin" — LinkedIn groups
+- "discord" - Discord servers
+- "meetup" - Meetup.com groups or regular in-person meetups
+- "facebook-group" - Facebook groups
+- "slack" - Slack workspaces
+- "telegram" - Telegram groups/channels
+- "whatsapp" - WhatsApp groups
+- "forum-group" - Forum-hosted local group pages (EA Forum, LessWrong)
+- "website" - Standalone website for a community/organization
+- "mailing-list" - Email lists, newsletters
+- "subreddit" - Reddit communities
+- "linkedin" - LinkedIn groups
 - "other"
 
 Scoring guidelines:
@@ -136,7 +136,7 @@ Location formatting:
 - Infer location from the community name, description, or URL when possible (e.g. "EA London" → "London, UK")
 
 DUPLICATE DETECTION:
-You may be given a list of existing communities already in our database. If the candidate is clearly the same community as one already listed — even if the URL or name differs slightly — set "duplicate_of" to the ID of the matching existing community.
+You may be given a list of existing communities already in our database. If the candidate is clearly the same community as one already listed - even if the URL or name differs slightly - set "duplicate_of" to the ID of the matching existing community.
 
 Signs of a duplicate:
 - Same group name appearing under different platform links (e.g. Discord + Meetup for the same EA city group)
@@ -399,7 +399,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingCom
     return 'error';
   }
 
-  // Borderline — needs admin review
+  // Borderline - needs admin review
   await supabase
     .from('community_candidates')
     .update({ status: 'evaluated' })
@@ -537,7 +537,7 @@ async function evaluateSingleUrl(url: string) {
     return;
   }
 
-  // Not found — insert as a new candidate and evaluate
+  // Not found - insert as a new candidate and evaluate
   console.log('No existing candidate found. Creating new entry...\n');
 
   const candidateId = `manual-comm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -576,7 +576,7 @@ async function main() {
     }
     await evaluateSingleUrl(url);
   } else {
-    console.log(`Community Evaluator — The AI gatekeeper for howdoihelp.ai communities
+    console.log(`Community Evaluator - The AI gatekeeper for howdoihelp.ai communities
 
 Usage:
   npx tsx scripts/evaluate-community.ts --url <URL>

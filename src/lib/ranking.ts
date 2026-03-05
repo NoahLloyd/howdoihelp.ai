@@ -81,14 +81,14 @@ function locationFit(resource: Resource, geo: GeoData): number {
     return 1.3;
   }
 
-  // Country match — use full name (more reliable than 2-letter codes which
+  // Country match - use full name (more reliable than 2-letter codes which
   // can false-match as substrings, e.g. "us" in "Houston")
   const countryName = geo.country.toLowerCase();
   if (countryName !== "unknown" && loc.includes(countryName)) {
     return 1.2;
   }
 
-  // Country code — only match when it appears as a standalone token
+  // Country code - only match when it appears as a standalone token
   // (e.g. "Berlin, DE" but not "Houston, US" matching "us" in "Houston")
   const countryCode = geo.countryCode.toLowerCase();
   if (countryCode !== "xx" && countryCode.length === 2) {
@@ -96,7 +96,7 @@ function locationFit(resource: Resource, geo: GeoData): number {
     if (codePattern.test(loc)) return 1.2;
   }
 
-  // Location-specific but doesn't match — still show, just reduced
+  // Location-specific but doesn't match - still show, just reduced
   return 0.3;
 }
 
@@ -160,7 +160,7 @@ const PROFILE_POSITION_HINTS: Partial<Record<ProfilePlatform, PositionTag>> = {
 function profileFit(resource: Resource, profilePlatform?: ProfilePlatform): number {
   if (!profilePlatform) return 1.0;
   const hintedPosition = PROFILE_POSITION_HINTS[profilePlatform];
-  if (!hintedPosition) return 1.0; // linkedin, facebook, other — no signal yet
+  if (!hintedPosition) return 1.0; // linkedin, facebook, other - no signal yet
   const tags = resource.position_tags || [];
   if (tags.includes(hintedPosition)) return 1.2;
   return 1.0;
@@ -171,7 +171,7 @@ function activityFit(resource: Resource): number {
   // If not set, assume decent quality.
   const score = resource.activity_score;
   if (score == null) return 1.0;
-  // Anything below 0.2 is basically dead — hard zero, should never appear
+  // Anything below 0.2 is basically dead - hard zero, should never appear
   if (score < 0.2) return 0;
   // Scale so 0.2→0.4, 0.5→0.7, 1.0→1.0
   return 0.2 + score * 0.8;
@@ -255,7 +255,7 @@ function remotenessBonus(resources: Resource[], geo: GeoData): number {
     (r) => isLocalCategory(r) && r.enabled && locationFit(r, geo) > 1.0
   ).length;
 
-  // Only boost remote users — never penalize hubs.
+  // Only boost remote users - never penalize hubs.
   // Since there's only ever one local card, there's no flooding risk.
   if (nearbyCount === 0) return 1.4;
   if (nearbyCount <= 2) return 1.2;
@@ -266,7 +266,7 @@ function remotenessBonus(resources: Resource[], geo: GeoData): number {
 
 /**
  * Rank non-local resources (letters, programs, other).
- * Events and communities are excluded — they go into the local card instead.
+ * Events and communities are excluded - they go into the local card instead.
  */
 export function rankResources(
   resources: Resource[],
@@ -307,7 +307,7 @@ export function rankResources(
  * Build a single collapsed "local card" from all nearby events + communities.
  *
  * - The best nearby event or community becomes the anchor (events preferred).
- * - A remoteness bonus scales the card's score — users in remote areas get a boost.
+ * - A remoteness bonus scales the card's score - users in remote areas get a boost.
  * - Remaining items that pass the threshold become expandable extras.
  * - Returns null if nothing nearby passes the threshold.
  */
@@ -319,7 +319,7 @@ export function buildLocalCard(
   maxExtras: number = 6,
 ): LocalCard | null {
   // Only consider events/communities that are actually near the user
-  // (city, region, or country match — locationFit > 1.0).
+  // (city, region, or country match - locationFit > 1.0).
   // Global/online resources and anything far away are never shown here.
   const scored = resources
     .filter((r) =>

@@ -123,18 +123,18 @@ export default function GuideSettingsPage() {
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
 
-  // Form state — intro
+  // Form state - intro
   const [headline, setHeadline] = useState("");
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  // Form state — topics
+  // Form state - topics
   const [topics, setTopics] = useState<string[]>([]);
   const [bestFor, setBestFor] = useState("");
   const [customTopic, setCustomTopic] = useState("");
 
-  // Form state — who to talk to
+  // Form state - who to talk to
   const [customBackground, setCustomBackground] = useState("");
   const [preferredCareerStages, setPreferredCareerStages] = useState<string[]>(
     []
@@ -147,7 +147,7 @@ export default function GuideSettingsPage() {
   >([]);
   const [notAGoodFit, setNotAGoodFit] = useState("");
 
-  // Form state — availability
+  // Form state - availability
   const [calendarLink, setCalendarLink] = useState("");
   const [location, setLocation] = useState("");
   const [isAvailableInPerson, setIsAvailableInPerson] = useState(false);
@@ -155,7 +155,10 @@ export default function GuideSettingsPage() {
   const [geographicPreference, setGeographicPreference] =
     useState("anywhere");
 
-  // Form state — review
+  // Form state - booking
+  const [bookingMode, setBookingMode] = useState<"direct" | "approval_required">("direct");
+
+  // Form state - review
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [status, setStatus] = useState<GuideStatus>("draft");
@@ -187,6 +190,7 @@ export default function GuideSettingsPage() {
           );
           setNotAGoodFit(guide.not_a_good_fit || "");
           setGeographicPreference(guide.geographic_preference || "anywhere");
+          setBookingMode(guide.booking_mode || "direct");
         }
         if (profile) {
           setBio(profile.bio || "");
@@ -285,6 +289,7 @@ export default function GuideSettingsPage() {
         languages,
         not_a_good_fit: notAGoodFit || null,
         geographic_preference: geographicPreference,
+        booking_mode: bookingMode,
       });
 
       setStatus(finalStatus);
@@ -794,6 +799,47 @@ export default function GuideSettingsPage() {
                     autoFocus
                     className="w-full rounded-xl border border-border bg-card px-4 py-4 text-base outline-none transition-colors placeholder:text-muted focus:border-accent/50 focus:ring-2 focus:ring-accent/20"
                   />
+                </div>
+
+                {/* Booking mode */}
+                <div>
+                  <label className="text-sm font-medium text-foreground">
+                    How should people book with you?
+                  </label>
+                  <div className="mt-3 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBookingMode("direct")}
+                      className={`w-full rounded-xl border px-4 py-3.5 text-left transition-all cursor-pointer hover:border-accent/50 ${
+                        bookingMode === "direct"
+                          ? "border-accent bg-accent/10"
+                          : "border-border bg-card"
+                      }`}
+                    >
+                      <span className="block text-sm font-medium text-foreground">
+                        Direct booking
+                      </span>
+                      <span className="block text-xs text-muted mt-0.5">
+                        Anyone matched with you can book directly through your link
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBookingMode("approval_required")}
+                      className={`w-full rounded-xl border px-4 py-3.5 text-left transition-all cursor-pointer hover:border-accent/50 ${
+                        bookingMode === "approval_required"
+                          ? "border-accent bg-accent/10"
+                          : "border-border bg-card"
+                      }`}
+                    >
+                      <span className="block text-sm font-medium text-foreground">
+                        Review requests first
+                      </span>
+                      <span className="block text-xs text-muted mt-0.5">
+                        People send you a message and you decide whether to share your booking link
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Languages */}

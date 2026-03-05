@@ -1,5 +1,5 @@
 /**
- * gather-luma.ts — Searches Luma for AI safety related events.
+ * gather-luma.ts - Searches Luma for AI safety related events.
  *
  * Luma (luma.com, formerly lu.ma) hosts many EA/AI safety events. This gatherer:
  * 1. Searches known AI safety organizer calendars via API
@@ -402,7 +402,7 @@ async function main() {
   if (rejected.length > 0) {
     console.log(`\n🚫 Pre-filter rejected ${rejected.length} irrelevant events:`);
     for (const r of rejected) {
-      console.log(`   ✗ "${r.event.title}" — ${r.reason}`);
+      console.log(`   ✗ "${r.event.title}" - ${r.reason}`);
     }
   }
   console.log(`\n  ${kept.length} events passed pre-filter (${rejected.length} rejected).`);

@@ -220,7 +220,7 @@ export default function Home() {
 
   // ─── Home: render based on variant ───────────────────────
 
-  // Variant B: Browse — straight to browsable results
+  // Variant B: Browse - straight to browsable results
   if (variant === "B") {
     return (
       <>
@@ -233,7 +233,7 @@ export default function Home() {
     );
   }
 
-  // Variant A: Profile — inviting header + profile input
+  // Variant A: Profile - inviting header + profile input
   if (variant === "A") {
     return (
       <>
@@ -249,7 +249,7 @@ export default function Home() {
     );
   }
 
-  // Variant C: Guided — Q1 is the landing page
+  // Variant C: Guided - Q1 is the landing page
   return (
     <>
       <main className="flex min-h-dvh flex-col items-center justify-center px-6">
@@ -322,10 +322,10 @@ function VariantSelector({
 }) {
   return (
     <div className="group fixed bottom-4 right-4 z-50">
-      {/* Tiny dot — visible at rest */}
+      {/* Tiny dot - visible at rest */}
       <div className="h-2 w-2 rounded-full bg-muted-foreground/20 transition-opacity group-hover:opacity-0" />
 
-      {/* Full selector — visible on hover */}
+      {/* Full selector - visible on hover */}
       <div className="pointer-events-none absolute bottom-0 right-0 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground opacity-0 shadow-sm transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
         <span>Variant:</span>
         {VARIANTS.map((v) => (

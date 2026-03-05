@@ -39,6 +39,6 @@ export default async function SlugPage({ params }: SlugPageProps) {
     );
   }
 
-  // No creator page found — use existing referral redirect behavior
+  // No creator page found - use existing referral redirect behavior
   return <ReferralRedirect slug={slug} />;
 }

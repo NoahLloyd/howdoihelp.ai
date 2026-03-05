@@ -1,5 +1,5 @@
 /**
- * gather-ea-lesswrong.ts — Fetches upcoming events from EA Forum and LessWrong.
+ * gather-ea-lesswrong.ts - Fetches upcoming events from EA Forum and LessWrong.
  *
  * Refactored from the original sync-events.ts. Instead of inserting directly
  * into resources, dumps raw candidates into event_candidates for evaluation.
