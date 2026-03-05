@@ -4,29 +4,11 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 
 const fade = (delay: number = 0) => ({
-  initial: { opacity: 0, y: 12 },
+  initial: { opacity: 0, y: 16 },
   whileInView: { opacity: 1, y: 0 },
   viewport: { once: true, margin: "-40px" },
-  transition: { duration: 0.45, delay, ease: "easeOut" as const },
+  transition: { duration: 0.5, delay, ease: "easeOut" as const },
 });
-
-const LINKS = [
-  {
-    href: "/communities",
-    label: "Communities",
-    detail: "Groups, chapters, and meetups by location and topic",
-  },
-  {
-    href: "/events",
-    label: "Events",
-    detail: "Conferences, workshops, and gatherings",
-  },
-  {
-    href: "/developers",
-    label: "API",
-    detail: "Open data, no auth required, JSON and CSV",
-  },
-];
 
 export function AboutContent() {
   return (
@@ -42,61 +24,168 @@ export function AboutContent() {
           </Link>
         </motion.div>
 
-        {/* Title */}
+        {/* ── What this is ─────────────────────────────────── */}
         <motion.h1
-          {...fade(0.08)}
-          className="mt-10 text-3xl font-semibold tracking-tight sm:text-4xl"
+          {...fade(0.06)}
+          className="mt-14 text-3xl font-semibold tracking-tight sm:text-4xl"
         >
           howdoihelp.ai
         </motion.h1>
 
-        {/* One-liner */}
-        <motion.p
-          {...fade(0.14)}
-          className="mt-4 text-base leading-relaxed text-muted-foreground"
-        >
-          We collect AI safety communities, events, and programs from across
-          the ecosystem and rank them for you based on your background,
-          location, and availability.
-        </motion.p>
-
-        {/* Links */}
-        <motion.div {...fade(0.2)} className="mt-10 flex flex-col gap-2">
-          {LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="group flex items-center justify-between rounded-xl border border-border bg-card px-5 py-4 transition-colors hover:border-accent/30"
-            >
-              <div>
-                <span className="text-sm font-medium text-foreground group-hover:text-accent transition-colors">
-                  {link.label}
-                </span>
-                <span className="ml-3 text-xs text-muted-foreground">
-                  {link.detail}
-                </span>
-              </div>
-              <span className="text-muted-foreground/30 group-hover:text-accent transition-colors">
-                &rarr;
-              </span>
-            </Link>
-          ))}
+        <motion.div {...fade(0.12)} className="mt-6 space-y-4">
+          <p className="text-[17px] leading-relaxed text-muted-foreground">
+            A lot of people now believe AI development carries serious risks,
+            but most have no idea what to do about it. There are hundreds of
+            communities, events, programs, and organizations working on AI
+            safety, but it is hard to find what makes sense for you.
+          </p>
+          <p className="text-[17px] leading-relaxed text-muted-foreground">
+            We strive to make it as easy as possible to find the best way to
+            get started, by collecting those resources and matching them to
+            you.
+          </p>
         </motion.div>
 
-        {/* Contact */}
-        <motion.p
-          {...fade(0.26)}
-          className="mt-12 text-sm text-muted-foreground"
-        >
-          Built by Noah.{" "}
-          <a
-            href="mailto:n@noahlr.com"
-            className="text-accent hover:underline"
-          >
-            n@noahlr.com
-          </a>
-        </motion.p>
+        {/* ── Browse ───────────────────────────────────────── */}
+        <motion.div {...fade()} className="mt-20">
+          <h2 className="text-xl font-semibold tracking-tight">
+            What you can find here
+          </h2>
+
+          <div className="mt-6 flex flex-col gap-2">
+            <PageLink
+              href="/communities"
+              title="Communities"
+              description="Groups, chapters, and meetups by location and topic"
+            />
+            <PageLink
+              href="/events"
+              title="Events"
+              description="Conferences, workshops, and gatherings"
+            />
+            <PageLink
+              href="/programs"
+              title="Programs"
+              description="Courses, fellowships, grants, and training"
+            />
+            <PageLink
+              href="/letters"
+              title="Letters & Petitions"
+              description="Open letters and pledges you can sign"
+            />
+          </div>
+
+        </motion.div>
+
+        {/* ── Guides ───────────────────────────────────────── */}
+        <motion.div {...fade()} className="mt-20">
+          <h2 className="text-xl font-semibold tracking-tight">
+            Talk to someone
+          </h2>
+
+          <p className="mt-3 text-base leading-relaxed text-muted-foreground">
+            Guides are people already working in AI safety who volunteer
+            30-minute video calls to help others navigate the field. They can
+            help you figure out where your skills are most needed, which
+            programs are worth applying to, and what the day-to-day work
+            actually looks like.
+          </p>
+
+          <div className="mt-6 flex flex-col gap-2">
+            <PageLink
+              href="/guides"
+              title="Browse guides"
+              description="Find someone with relevant experience and book a free call"
+            />
+            <PageLink
+              href="/auth/login"
+              title="Become a guide"
+              description="Sign up to take calls and help people entering the field"
+            />
+          </div>
+        </motion.div>
+
+        {/* ── Build ────────────────────────────────────────── */}
+        <motion.div {...fade()} className="mt-20">
+          <h2 className="text-xl font-semibold tracking-tight">
+            Build on this
+          </h2>
+
+          <p className="mt-3 text-base leading-relaxed text-muted-foreground">
+            The data and the platform are open for others to use.
+          </p>
+
+          <div className="mt-6 flex flex-col gap-2">
+            <PageLink
+              href="/auth/login"
+              title="Creator pages"
+              description="Build a custom landing page for your audience at howdoihelp.ai/your-name with your own questions, resource selections, and flow"
+            />
+            <PageLink
+              href="/developers"
+              title="Developer API"
+              description="Free, public access to all communities and events data. No authentication needed. JSON and CSV."
+            />
+          </div>
+        </motion.div>
+
+        {/* ── Footer ───────────────────────────────────────── */}
+        <motion.div {...fade()} className="mt-24">
+          <div className="h-px bg-border" />
+
+          <p className="mt-8 text-sm leading-relaxed text-muted-foreground">
+            This project is{" "}
+            <a
+              href="https://github.com/NoahLloyd/help-ai-safety"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground hover:text-accent transition-colors"
+            >
+              open source
+            </a>{" "}
+            under the MIT license. Built by{" "}
+            <a
+              href="https://noahlr.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground hover:text-accent transition-colors"
+            >
+              Noah Lloyd Robson
+            </a>.
+          </p>
+        </motion.div>
       </div>
     </div>
+  );
+}
+
+/* ── Page link row ──────────────────────────────────────────── */
+
+function PageLink({
+  href,
+  title,
+  description,
+}: {
+  href: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex items-center justify-between rounded-xl border border-border bg-card px-5 py-4 transition-colors hover:border-accent/30"
+    >
+      <div>
+        <span className="block text-sm font-medium text-foreground group-hover:text-accent transition-colors">
+          {title}
+        </span>
+        <span className="mt-1 block text-xs text-muted-foreground">
+          {description}
+        </span>
+      </div>
+      <span className="shrink-0 text-muted/30 group-hover:text-accent transition-colors ml-3">
+        &rarr;
+      </span>
+    </Link>
   );
 }
