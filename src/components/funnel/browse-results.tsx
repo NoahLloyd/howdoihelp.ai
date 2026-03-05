@@ -181,26 +181,6 @@ function applySortToResources(resources: Resource[], sort: SortId): Resource[] {
   }
 }
 
-// ─── Location filter ──────────────────────────────────────────
-
-type LocationFilter = "all" | "near" | "online";
-
-const LOCATION_FILTERS: { id: LocationFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "near", label: "Near me" },
-  { id: "online", label: "Online" },
-];
-
-// ─── Time filter ──────────────────────────────────────────────
-
-type TimeFilter = "any" | "quick" | "deep";
-
-const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
-  { id: "any", label: "Any time" },
-  { id: "quick", label: "Under 1 hour" },
-  { id: "deep", label: "Multi-week" },
-];
-
 // ─── Main Component ──────────────────────────────────────────
 
 interface BrowseResultsProps {
@@ -446,36 +426,6 @@ function SearchInput({
   );
 }
 
-// ─── Filter Chips ─────────────────────────────────────────────
-
-function FilterChips<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: { id: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map((opt) => (
-        <button
-          key={opt.id}
-          onClick={() => onChange(opt.id)}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-            value === opt.id
-              ? "bg-foreground/10 text-foreground"
-              : "text-muted hover:bg-card-hover hover:text-muted-foreground"
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ─── Resource List with Show More ─────────────────────────────
 
 function ResourceList({
@@ -553,7 +503,7 @@ type ConnectTab = "communities" | "events" | "other";
 const CONNECT_TABS: { id: ConnectTab; label: string }[] = [
   { id: "communities", label: "Communities" },
   { id: "events", label: "Events" },
-  { id: "other", label: "Other" },
+  { id: "other", label: "Online" },
 ];
 
 interface ConnectExplorerProps {
@@ -566,20 +516,20 @@ interface ConnectExplorerProps {
 
 function ConnectExplorer({ resources, variant, geo, onClickTrack, onLocationChange }: ConnectExplorerProps) {
   const [search, setSearch] = useState("");
-  const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
-  const [sort, setSort] = useState<SortId>("relevance");
 
-  // Split resources by sub-type
+  // Split resources by sub-type — online items go into the "Online" tab
   const communities = useMemo(
-    () => resources.filter((r) => r.category === "communities"),
+    () => resources.filter((r) => r.category === "communities" && !isOnline(r)),
     [resources]
   );
   const events = useMemo(
-    () => resources.filter((r) => r.category === "events"),
+    () => resources.filter((r) => r.category === "events" && !isOnline(r)),
     [resources]
   );
   const other = useMemo(
-    () => resources.filter((r) => r.category !== "communities" && r.category !== "events"),
+    () => resources.filter((r) =>
+      (r.category !== "communities" && r.category !== "events") || isOnline(r)
+    ),
     [resources]
   );
 
@@ -618,35 +568,22 @@ function ConnectExplorer({ resources, variant, geo, onClickTrack, onLocationChan
       items = items.filter((r) => matchesSearch(r, search));
     }
 
-    // Location filter
-    if (locationFilter === "near") {
-      items = items.filter((r) => isNearby(r, geo));
-    } else if (locationFilter === "online") {
-      items = items.filter((r) => isOnline(r) || r.location.toLowerCase() === "global");
-    }
-
-    // Sort - always factor in nearness for communities & events
-    if (sort === "relevance") {
-      if (tab === "events") {
-        // Nearness first, then date within same nearness tier
-        items = [...items].sort((a, b) => {
-          const na = nearness(a, geo);
-          const nb = nearness(b, geo);
-          // Group into tiers: nearby (>=1), global/online (0.5), far (0)
-          const tierA = na >= 1 ? 2 : na > 0 ? 1 : 0;
-          const tierB = nb >= 1 ? 2 : nb > 0 ? 1 : 0;
-          if (tierA !== tierB) return tierB - tierA;
-          return sortByEventDate(a, b);
-        });
-      } else {
-        items = [...items].sort(sortByNearness(geo));
-      }
+    // Sort — nearness first, then date for events, impact for others
+    if (tab === "events") {
+      items = [...items].sort((a, b) => {
+        const na = nearness(a, geo);
+        const nb = nearness(b, geo);
+        const tierA = na >= 1 ? 2 : na > 0 ? 1 : 0;
+        const tierB = nb >= 1 ? 2 : nb > 0 ? 1 : 0;
+        if (tierA !== tierB) return tierB - tierA;
+        return sortByEventDate(a, b);
+      });
     } else {
-      items = applySortToResources(items, sort);
+      items = [...items].sort(sortByNearness(geo));
     }
 
     return items;
-  }, [pool, search, locationFilter, sort, tab, geo]);
+  }, [pool, search, tab, geo]);
 
   // Counts for tabs
   const tabCounts: Record<ConnectTab, number> = {
@@ -693,47 +630,13 @@ function ConnectExplorer({ resources, variant, geo, onClickTrack, onLocationChan
         placeholder={`Search ${tab === "communities" ? "communities" : tab === "events" ? "events" : "resources"}...`}
       />
 
-      {/* Filters row */}
-      <div className="flex flex-wrap items-center gap-3">
-        <FilterChips options={LOCATION_FILTERS} value={locationFilter} onChange={setLocationFilter} />
-
-        {tab === "events" && (
-          <div className="ml-auto">
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortId)}
-              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-accent"
-            >
-              <option value="relevance">Soonest</option>
-              <option value="quickest">Quickest</option>
-            </select>
-          </div>
-        )}
-      </div>
-
       {/* Location context */}
-      {locationFilter === "near" && geo && (
-        geo.country === "Unknown" && !geo.city ? (
-          <div className="flex flex-col gap-2 rounded-lg border border-accent/20 bg-accent/5 p-3">
-            <p className="text-xs text-muted-foreground">
-              We couldn&apos;t detect your location. Enter your city to see nearby results:
-            </p>
-            <div className="flex items-center text-xs text-muted-foreground">
-              <LocationPicker geo={geo} onLocationChange={onLocationChange} autoOpen />
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center text-xs text-muted-foreground">
-            <span>Showing results near</span>
-            <LocationPicker geo={geo} onLocationChange={onLocationChange} />
-          </div>
-        )
+      {geo && geo.city && (
+        <div className="flex items-center text-xs text-muted-foreground">
+          <span>Sorted by distance from</span>
+          <LocationPicker geo={geo} onLocationChange={onLocationChange} />
+        </div>
       )}
-
-      {/* Count */}
-      <p className="text-xs text-muted">
-        {filtered.length} {filtered.length === 1 ? "result" : "results"}
-      </p>
 
       {/* Results */}
       <ResourceList
@@ -763,7 +666,6 @@ interface LearnExplorerProps {
 
 function LearnExplorer({ resources, variant, onClickTrack }: LearnExplorerProps) {
   const [search, setSearch] = useState("");
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>("any");
 
   const quickReads = useMemo(
     () => resources.filter((r) => r.min_minutes < 60),
@@ -804,14 +706,8 @@ function LearnExplorer({ resources, variant, onClickTrack }: LearnExplorerProps)
       items = items.filter((r) => matchesSearch(r, search));
     }
 
-    if (timeFilter === "quick") {
-      items = items.filter((r) => r.min_minutes < 60);
-    } else if (timeFilter === "deep") {
-      items = items.filter((r) => r.min_minutes >= 480);
-    }
-
     return [...items].sort(sortByImpact);
-  }, [pool, search, timeFilter]);
+  }, [pool, search]);
 
   const tabCounts: Record<LearnTab, number> = {
     quick: quickReads.length,
@@ -826,7 +722,7 @@ function LearnExplorer({ resources, variant, onClickTrack }: LearnExplorerProps)
           {visibleTabs.map((t) => (
             <button
               key={t.id}
-              onClick={() => { setTab(t.id); setSearch(""); setTimeFilter("any"); }}
+              onClick={() => { setTab(t.id); setSearch(""); }}
               className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
                 tab === t.id
                   ? "text-foreground"
@@ -855,16 +751,6 @@ function LearnExplorer({ resources, variant, onClickTrack }: LearnExplorerProps)
         onChange={setSearch}
         placeholder={`Search ${tab === "quick" ? "resources" : "courses"}...`}
       />
-
-      {/* Time filter (only for courses tab) */}
-      {tab === "courses" && (
-        <FilterChips options={TIME_FILTERS} value={timeFilter} onChange={setTimeFilter} />
-      )}
-
-      {/* Count */}
-      <p className="text-xs text-muted">
-        {filtered.length} {filtered.length === 1 ? "result" : "results"}
-      </p>
 
       {/* Results */}
       <ResourceList
@@ -911,10 +797,7 @@ function SimpleExplorer({ resources, variant, onClickTrack }: SimpleExplorerProp
       )}
 
       {showSearch && (
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-muted">
-            {filtered.length} {filtered.length === 1 ? "result" : "results"}
-          </p>
+        <div className="flex items-center justify-end">
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortId)}
