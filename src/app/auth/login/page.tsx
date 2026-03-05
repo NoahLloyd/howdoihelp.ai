@@ -54,7 +54,7 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
-          redirectTo: `/auth/callback?next=${next}`,
+          next,
         }),
       });
 

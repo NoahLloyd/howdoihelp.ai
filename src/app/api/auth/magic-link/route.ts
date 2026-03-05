@@ -16,9 +16,9 @@ function getBaseUrl(): string {
 
 export async function POST(req: Request) {
   try {
-    const { email, redirectTo } = (await req.json()) as {
+    const { email, next } = (await req.json()) as {
       email?: string;
-      redirectTo?: string;
+      next?: string;
     };
 
     if (!email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -27,12 +27,10 @@ export async function POST(req: Request) {
 
     const supabase = getServiceClient();
     const base = getBaseUrl();
-    const callbackUrl = `${base}${redirectTo || "/auth/callback?next=/dashboard"}`;
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "magiclink",
       email: email.trim(),
-      options: { redirectTo: callbackUrl },
     });
 
     if (error) {
@@ -40,14 +38,12 @@ export async function POST(req: Request) {
       return Response.json({ error: "Failed to generate link" }, { status: 500 });
     }
 
-    // Supabase ignores our redirectTo and uses the project's Site URL setting,
-    // so we replace the redirect_to parameter in the generated link ourselves.
-    const rawLink = data.properties.action_link;
-    const linkUrl = new URL(rawLink);
-    linkUrl.searchParams.set("redirect_to", callbackUrl);
-    const actionLink = linkUrl.toString();
+    // Build our own verify URL so the token is verified server-side.
+    // This avoids the implicit flow hash fragment issues entirely.
+    const tokenHash = data.properties.hashed_token;
+    const verifyUrl = `${base}/api/auth/verify?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink&next=${encodeURIComponent(next || "/dashboard")}`;
 
-    await sendMagicLinkEmail(email.trim(), actionLink);
+    await sendMagicLinkEmail(email.trim(), verifyUrl);
 
     return Response.json({ ok: true });
   } catch (err) {
