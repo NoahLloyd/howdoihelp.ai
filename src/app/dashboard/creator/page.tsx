@@ -438,100 +438,126 @@ export default function CreatorPage() {
 
       {/* ── Resource Overrides ───────────────────────────── */}
       <section className="mt-10">
-        <button
-          onClick={() => setShowResources(!showResources)}
-          className="flex items-center gap-2 w-full text-left"
-        >
-          <h2 className="text-lg font-semibold text-foreground">Resource Overrides</h2>
-          <span className="text-xs text-muted-foreground">
-            {excludedResources.length > 0 && `${excludedResources.length} excluded`}
-            {excludedResources.length > 0 && boostedResources.length > 0 && " · "}
-            {boostedResources.length > 0 && `${boostedResources.length} boosted`}
-          </span>
-          <ChevronDown className={`h-4 w-4 text-muted ml-auto transition-transform ${showResources ? "rotate-180" : ""}`} />
-        </button>
+        <h2 className="text-lg font-semibold text-foreground">Resource Overrides</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Choose which resources to show, hide, or prioritize for your audience.
+          Control which resources your audience sees.
         </p>
 
-        <AnimatePresence>
-          {showResources && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <div className="mt-4">
-                {/* Search */}
-                <div className="relative mb-3">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                  <input
-                    type="text"
-                    value={resourceSearch}
-                    onChange={(e) => setResourceSearch(e.target.value)}
-                    placeholder="Search resources..."
-                    className="w-full rounded-xl border border-border bg-card py-2.5 pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-muted focus:border-accent/50 focus:ring-2 focus:ring-accent/10"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5 max-h-96 overflow-y-auto">
-                  {filteredResources.map((resource) => {
-                    const isExcluded = excludedResources.includes(resource.id);
-                    const isBoosted = boostedResources.includes(resource.id);
-
-                    return (
-                      <div
-                        key={resource.id}
-                        className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all ${
-                          isExcluded
-                            ? "border-rose-200 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/20"
-                            : isBoosted
-                              ? "border-amber-200 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/20"
-                              : "border-border bg-card"
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium truncate ${isExcluded ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                            {resource.title}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {resource.source_org} · {resource.category}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            onClick={() => toggleBoost(resource.id)}
-                            className={`rounded-lg p-1.5 text-xs transition-colors ${
-                              isBoosted
-                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
-                                : "text-muted hover:text-foreground hover:bg-card-hover"
-                            }`}
-                            title={isBoosted ? "Remove boost" : "Boost this resource"}
-                          >
-                            <Star className="h-3.5 w-3.5" fill={isBoosted ? "currentColor" : "none"} />
-                          </button>
-                          <button
-                            onClick={() => toggleExclude(resource.id)}
-                            className={`rounded-lg p-1.5 text-xs transition-colors ${
-                              isExcluded
-                                ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400"
-                                : "text-muted hover:text-foreground hover:bg-card-hover"
-                            }`}
-                            title={isExcluded ? "Show this resource" : "Hide this resource"}
-                          >
-                            <Ban className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+        <div className="mt-4 rounded-xl border border-border bg-card overflow-hidden">
+          {/* Card header — always visible */}
+          <div
+            className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-card-hover transition-colors"
+            onClick={() => setShowResources(!showResources)}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                {excludedResources.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-700 dark:bg-rose-900/40 dark:text-rose-400">
+                    <Ban className="h-3 w-3" />
+                    {excludedResources.length} hidden
+                  </span>
+                )}
+                {boostedResources.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                    <Star className="h-3 w-3" fill="currentColor" />
+                    {boostedResources.length} boosted
+                  </span>
+                )}
+                {excludedResources.length === 0 && boostedResources.length === 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    No overrides set. All resources will be shown.
+                  </span>
+                )}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <p className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+                Click <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400"><Star className="h-3 w-3" fill="currentColor" /> boost</span> to prioritize or <span className="inline-flex items-center gap-0.5 text-rose-600 dark:text-rose-400"><Ban className="h-3 w-3" /> hide</span> to exclude from your page
+              </p>
+            </div>
+            <button className="shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-card-hover transition-colors">
+              {showResources ? "Collapse" : "Edit"}
+            </button>
+          </div>
+
+          {/* Expanded resource list */}
+          <AnimatePresence>
+            {showResources && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="border-t border-border px-5 py-4">
+                  {/* Search */}
+                  <div className="relative mb-3">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                    <input
+                      type="text"
+                      value={resourceSearch}
+                      onChange={(e) => setResourceSearch(e.target.value)}
+                      placeholder="Search resources..."
+                      className="w-full rounded-xl border border-border bg-card py-2.5 pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-muted focus:border-accent/50 focus:ring-2 focus:ring-accent/10"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 max-h-96 overflow-y-auto">
+                    {filteredResources.map((resource) => {
+                      const isExcluded = excludedResources.includes(resource.id);
+                      const isBoosted = boostedResources.includes(resource.id);
+
+                      return (
+                        <div
+                          key={resource.id}
+                          className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all ${
+                            isExcluded
+                              ? "border-rose-200 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/20"
+                              : isBoosted
+                                ? "border-amber-200 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/20"
+                                : "border-border bg-card"
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium truncate ${isExcluded ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                              {resource.title}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {resource.source_org} · {resource.category}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => toggleBoost(resource.id)}
+                              className={`rounded-lg p-1.5 text-xs transition-colors ${
+                                isBoosted
+                                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
+                                  : "text-muted hover:text-foreground hover:bg-card-hover"
+                              }`}
+                              title={isBoosted ? "Remove boost" : "Boost this resource"}
+                            >
+                              <Star className="h-3.5 w-3.5" fill={isBoosted ? "currentColor" : "none"} />
+                            </button>
+                            <button
+                              onClick={() => toggleExclude(resource.id)}
+                              className={`rounded-lg p-1.5 text-xs transition-colors ${
+                                isExcluded
+                                  ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400"
+                                  : "text-muted hover:text-foreground hover:bg-card-hover"
+                              }`}
+                              title={isExcluded ? "Show this resource" : "Hide this resource"}
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </section>
 
       {/* ── Status & Save ────────────────────────────────── */}
