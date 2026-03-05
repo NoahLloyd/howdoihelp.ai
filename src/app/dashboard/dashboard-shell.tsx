@@ -15,30 +15,40 @@ import {
   ExternalLink,
 } from "lucide-react";
 
-const NAV_ITEMS = [
+const NAV_SECTIONS = [
   {
-    label: "Overview",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    active: true,
+    items: [
+      {
+        label: "Overview",
+        href: "/dashboard",
+        icon: LayoutDashboard,
+      },
+    ],
   },
   {
-    label: "Guide Profile",
-    href: "/dashboard/guide",
-    icon: UserCircle,
-    active: true,
+    label: "Guide",
+    items: [
+      {
+        label: "Profile",
+        href: "/dashboard/guide",
+        icon: UserCircle,
+      },
+      {
+        label: "Playbook",
+        href: "/dashboard/resources",
+        icon: BookOpen,
+      },
+    ],
   },
   {
-    label: "Creators",
-    href: "/dashboard/creator",
-    icon: Megaphone,
-    active: true,
-  },
-  {
-    label: "Guide Playbook",
-    href: "/dashboard/resources",
-    icon: BookOpen,
-    active: true,
+    label: "Creator",
+    items: [
+      {
+        label: "Custom Page",
+        href: "/dashboard/creator",
+        icon: Megaphone,
+      },
+    ],
   },
 ];
 
@@ -70,28 +80,37 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           {/* Primary nav */}
-          <nav className="mt-8 flex flex-col gap-1">
-            {NAV_ITEMS.map((item) => {
-              const isActive =
-                item.href === "/dashboard"
-                  ? pathname === "/dashboard"
-                  : pathname.startsWith(item.href);
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-white/10 text-white"
-                      : "text-white/50 hover:bg-white/5 hover:text-white/80"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
+          <nav className="mt-8 flex flex-col gap-5">
+            {NAV_SECTIONS.map((section, si) => (
+              <div key={si} className="flex flex-col gap-1">
+                {section.label && (
+                  <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-white/30">
+                    {section.label}
+                  </p>
+                )}
+                {section.items.map((item) => {
+                  const isActive =
+                    item.href === "/dashboard"
+                      ? pathname === "/dashboard"
+                      : pathname.startsWith(item.href);
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-white/10 text-white"
+                          : "text-white/50 hover:bg-white/5 hover:text-white/80"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
           {/* Spacer */}
@@ -176,29 +195,38 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileOpen(false)}
           />
           <div className="lg:hidden fixed top-[52px] inset-x-0 z-40 bg-[#13132B] border-t border-white/10 px-4 py-4">
-            <nav className="flex flex-col gap-1">
-              {NAV_ITEMS.map((item) => {
-                const isActive =
-                  item.href === "/dashboard"
-                    ? pathname === "/dashboard"
-                    : pathname.startsWith(item.href);
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                      isActive
-                        ? "bg-white/10 text-white"
-                        : "text-white/50 hover:bg-white/5 hover:text-white/80"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
+            <nav className="flex flex-col gap-4">
+              {NAV_SECTIONS.map((section, si) => (
+                <div key={si} className="flex flex-col gap-1">
+                  {section.label && (
+                    <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-white/30">
+                      {section.label}
+                    </p>
+                  )}
+                  {section.items.map((item) => {
+                    const isActive =
+                      item.href === "/dashboard"
+                        ? pathname === "/dashboard"
+                        : pathname.startsWith(item.href);
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMobileOpen(false)}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                          isActive
+                            ? "bg-white/10 text-white"
+                            : "text-white/50 hover:bg-white/5 hover:text-white/80"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
 
             <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
