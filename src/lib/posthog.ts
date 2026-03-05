@@ -12,7 +12,7 @@ export function initPostHog() {
 
   posthog.init(key, {
     api_host: host,
-    autocapture: false, // manual events only — saves free-tier quota
+    autocapture: false, // manual events only - saves free-tier quota
     capture_pageview: false, // we fire these manually for more control
     capture_pageleave: true, // useful for knowing when users abandon
     persistence: "localStorage+cookie",

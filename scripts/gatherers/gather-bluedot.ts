@@ -1,5 +1,5 @@
 /**
- * gather-bluedot.ts — Fetches courses from BlueDot Impact's course hub.
+ * gather-bluedot.ts - Fetches courses from BlueDot Impact's course hub.
  *
  * BlueDot Impact offers free AI safety courses with certificates:
  * https://bluedot.org/courses
@@ -9,7 +9,7 @@
  * 2. For each course displayed on the hub, fetches upcoming rounds (intensive + part-time)
  * 3. Creates one program candidate per course+round combination
  *
- * No API key needed — uses public tRPC endpoints.
+ * No API key needed - uses public tRPC endpoints.
  *
  * Usage:
  *   npx tsx scripts/gatherers/gather-bluedot.ts

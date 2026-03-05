@@ -19,7 +19,7 @@ export async function createAuthClient() {
               cookieStore.set(name, value, options)
             );
           } catch {
-            // setAll called from a Server Component — safe to ignore
+            // setAll called from a Server Component - safe to ignore
             // when proxy is refreshing sessions.
           }
         },

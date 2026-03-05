@@ -45,7 +45,7 @@ export interface LLMResponse {
 /** Errors that should NOT trigger OpenAI fallback (caller mistakes, not provider issues) */
 function isClientError(err: unknown): boolean {
   if (err instanceof Anthropic.BadRequestError) {
-    // Content policy violations — OpenAI would likely reject too
+    // Content policy violations - OpenAI would likely reject too
     const msg = (err.message || "").toLowerCase();
     if (msg.includes("prompt is too long") || msg.includes("content policy")) return true;
   }
@@ -150,7 +150,7 @@ export function extractJson(raw: string): string {
   if (fenceMatch) {
     s = fenceMatch[1].trim();
   }
-  // 2. Truncated fence — opening ``` but no closing ```
+  // 2. Truncated fence - opening ``` but no closing ```
   else if (/^```/.test(s)) {
     s = s.replace(/^```(?:json)?\s*\n?/, "").trim();
   }

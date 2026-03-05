@@ -1,5 +1,5 @@
 /**
- * sync-all-events.ts — The full event pipeline orchestrator.
+ * sync-all-events.ts - The full event pipeline orchestrator.
  *
  * Runs all gatherers, then processes the queue through the AI evaluator.
  * This is the single command for autonomous event pipeline operation.
@@ -61,7 +61,7 @@ function runScript(scriptPath: string, extraArgs: string[] = []): Promise<{ succ
 async function main() {
   const startTime = Date.now();
   console.log('='.repeat(60));
-  console.log('  EVENT PIPELINE — howdoihelp.ai');
+  console.log('  EVENT PIPELINE - howdoihelp.ai');
   console.log(`  ${new Date().toISOString()}`);
   console.log('='.repeat(60));
 
@@ -99,7 +99,7 @@ async function main() {
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log('\n' + '='.repeat(60));
-  console.log(`  PIPELINE COMPLETE — ${elapsed}s`);
+  console.log(`  PIPELINE COMPLETE - ${elapsed}s`);
   console.log('='.repeat(60));
 }
 

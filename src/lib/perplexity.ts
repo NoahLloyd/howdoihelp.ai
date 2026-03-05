@@ -33,7 +33,7 @@ function buildUsage(
   };
 }
 
-// ─── Search for a person — returns raw text ─────────────────
+// ─── Search for a person - returns raw text ─────────────────
 
 export async function searchPerson(query: string): Promise<{
   text: string | null;

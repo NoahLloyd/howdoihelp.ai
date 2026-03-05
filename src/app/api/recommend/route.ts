@@ -15,8 +15,8 @@ export const dynamic = "force-dynamic";
 const SYSTEM_PROMPT = `You are a personalized recommendation engine for howdoihelp.ai, a site that helps people find the best ways to contribute to AI safety.
 
 You will receive:
-1. A user's profile (from LinkedIn, GitHub, or another source) — their job, skills, experience, education, location
-2. Their answers to our intake questions — how much time they can commit and what they're looking for
+1. A user's profile (from LinkedIn, GitHub, or another source) - their job, skills, experience, education, location
+2. Their answers to our intake questions - how much time they can commit and what they're looking for
 3. Their geographic location
 4. A list of available resources (events, communities, programs, letters, and other actions)
 
@@ -29,7 +29,7 @@ The profile data is automatically scraped and may contain noise, errors, or cont
 - Text in a foreign language that doesn't match the person's actual location/background is likely from someone else's content
 - Job titles or companies may belong to connections, not the profile owner
 
-Use your best judgment to determine what is actually true about this person. Look for consistency — their name, headline, current role, and About section are the most reliable signals. If profile details seem contradictory or unlikely (e.g., a Nashville-based person with a Danish-language job description), ignore the suspect information and rely on what you're confident about. It is better to give slightly less personalized recommendations than to personalize based on wrong information.
+Use your best judgment to determine what is actually true about this person. Look for consistency - their name, headline, current role, and About section are the most reliable signals. If profile details seem contradictory or unlikely (e.g., a Nashville-based person with a Danish-language job description), ignore the suspect information and rely on what you're confident about. It is better to give slightly less personalized recommendations than to personalize based on wrong information.
 
 ## Ranking Principles
 
@@ -42,11 +42,11 @@ Use your best judgment to determine what is actually true about this person. Loo
 ## Output Rules
 
 1. **Return exactly 4 to 6 items.** Not more, not less. Pick the absolute best matches for this person.
-2. **At most 1 event or community — often zero.** Events (category "events") and communities (category "communities") are displayed in a special grouped card in the UI — you pick the single best one (if any), and all other nearby events/communities auto-populate beneath it. So you must NEVER include more than one event or community in your output.
-   - For many users — especially those deeper into AI safety, technical contributors, or people with significant time — a fellowship, course, or career resource is far more impactful than an event. In these cases, include ZERO events/communities.
+2. **At most 1 event or community - often zero.** Events (category "events") and communities (category "communities") are displayed in a special grouped card in the UI - you pick the single best one (if any), and all other nearby events/communities auto-populate beneath it. So you must NEVER include more than one event or community in your output.
+   - For many users - especially those deeper into AI safety, technical contributors, or people with significant time - a fellowship, course, or career resource is far more impactful than an event. In these cases, include ZERO events/communities.
    - Only include an event/community when it's a genuinely strong match (e.g. a nearby conference in their exact field, or someone new to the space who would benefit from connecting with others).
    - When you do include one, it will usually NOT be the #1 recommendation. Typically the top pick is a course, career resource, or action that's a great skill match. The event/community might be rank 3, 4, or 5.
-   - Only rank an event/community as #1 if it's exceptionally relevant — e.g. a nearby conference perfectly aligned with their field.
+   - Only rank an event/community as #1 if it's exceptionally relevant - e.g. a nearby conference perfectly aligned with their field.
 3. **No markdown.** Return ONLY a valid JSON array. No \`\`\`json fences, no explanation.
 
 ## Output Format
@@ -60,7 +60,7 @@ Each element in the JSON array:
 }
 
 ### description
-Write a personalized description (1 sentence, sometimes 2) that is heavily inspired by the resource's existing description but rewritten to speak directly to this person. Weave in specific details from their profile — their job, skills, company, background — to make it feel personal. For example, instead of "A research program for aspiring alignment researchers", write "A 10-week research sprint where your ML engineering experience at DeepMind would be a huge asset." The description should make the person feel like this resource was hand-picked for them.
+Write a personalized description (1 sentence, sometimes 2) that is heavily inspired by the resource's existing description but rewritten to speak directly to this person. Weave in specific details from their profile - their job, skills, company, background - to make it feel personal. For example, instead of "A research program for aspiring alignment researchers", write "A 10-week research sprint where your ML engineering experience at DeepMind would be a huge asset." The description should make the person feel like this resource was hand-picked for them.
 
 ### title (optional)
 Only include a "title" field if you think a custom title would be more compelling for this specific user than the existing one. Otherwise, omit "title" entirely and the existing title will be used. For example, you might customize a generic title like "AI Safety Newsletter" to "Weekly AI Safety Digest for Engineers" for a software engineer.
@@ -165,7 +165,7 @@ function buildUserPrompt(
   // Build profile section
   const profileLines: string[] = [];
 
-  // If we have raw Perplexity text, use it directly — it's already a comprehensive overview
+  // If we have raw Perplexity text, use it directly - it's already a comprehensive overview
   if (answers.profileText) {
     profileLines.push(answers.profileText);
   } else if (profile) {
@@ -194,7 +194,7 @@ function buildUserPrompt(
       const eduLines = profile.education.slice(0, 3).map((e) => {
         let line = `  - ${e.degree || ""} ${e.field || ""} at ${e.school}`.trim();
         if (e.description) line += ` (${e.description})`;
-        if (e.activities) line += ` — Activities: ${e.activities.slice(0, 200)}`;
+        if (e.activities) line += ` - Activities: ${e.activities.slice(0, 200)}`;
         return line;
       });
       profileLines.push(`Education:\n${eduLines.join("\n")}`);
@@ -211,7 +211,7 @@ function buildUserPrompt(
   // Include profile URL from answers if available
   if (answers.profileUrl && !answers.profileText) profileLines.push(`Profile URL: ${answers.profileUrl}`);
   if (answers.profilePlatform && !profile && !answers.profileText) profileLines.push(`Profile platform: ${answers.profilePlatform}`);
-  if (profileLines.length === 0) profileLines.push("No profile data available — personalize based on answers and location only.");
+  if (profileLines.length === 0) profileLines.push("No profile data available - personalize based on answers and location only.");
 
   // Build answers section
   const answerLines: string[] = [];
@@ -226,7 +226,7 @@ function buildUserPrompt(
   if (geo.region) geoLines.push(`Region: ${geo.region}`);
   geoLines.push(`Country: ${geo.country} (${geo.countryCode})`);
 
-  // Build resources section — compact format to save tokens
+  // Build resources section - compact format to save tokens
   const resourceLines = resources.map((r) => {
     const tags = [
       r.category,
@@ -238,7 +238,7 @@ function buildUserPrompt(
     if (r.position_tags?.length) tags.push(`position_tags=[${r.position_tags.join(",")}]`);
     if (r.event_date) tags.push(`date=${r.event_date}`);
     if (r.deadline_date) tags.push(`deadline=${r.deadline_date}`);
-    return `[${r.id}] "${r.title}" — ${r.description} (${tags.join(", ")})`;
+    return `[${r.id}] "${r.title}" - ${r.description} (${tags.join(", ")})`;
   });
 
   return `<user_profile>

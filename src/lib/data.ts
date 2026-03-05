@@ -35,7 +35,7 @@ export async function fetchResources(): Promise<Resource[]> {
 
 /**
  * Track a click on a resource.
- * Fire-and-forget — don't block the user experience.
+ * Fire-and-forget - don't block the user experience.
  */
 export async function trackClick(
   resourceId: string,
@@ -56,7 +56,7 @@ export async function trackClick(
       geo_country: geoCountry || null,
     });
   } catch {
-    // Silently fail — never block UX for tracking
+    // Silently fail - never block UX for tracking
   }
 }
 

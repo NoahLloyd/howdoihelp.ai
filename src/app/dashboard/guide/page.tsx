@@ -123,18 +123,18 @@ export default function GuideSettingsPage() {
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
 
-  // Form state — intro
+  // Form state - intro
   const [headline, setHeadline] = useState("");
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  // Form state — topics
+  // Form state - topics
   const [topics, setTopics] = useState<string[]>([]);
   const [bestFor, setBestFor] = useState("");
   const [customTopic, setCustomTopic] = useState("");
 
-  // Form state — who to talk to
+  // Form state - who to talk to
   const [customBackground, setCustomBackground] = useState("");
   const [preferredCareerStages, setPreferredCareerStages] = useState<string[]>(
     []
@@ -147,7 +147,7 @@ export default function GuideSettingsPage() {
   >([]);
   const [notAGoodFit, setNotAGoodFit] = useState("");
 
-  // Form state — availability
+  // Form state - availability
   const [calendarLink, setCalendarLink] = useState("");
   const [location, setLocation] = useState("");
   const [isAvailableInPerson, setIsAvailableInPerson] = useState(false);
@@ -155,7 +155,7 @@ export default function GuideSettingsPage() {
   const [geographicPreference, setGeographicPreference] =
     useState("anywhere");
 
-  // Form state — review
+  // Form state - review
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [status, setStatus] = useState<GuideStatus>("draft");

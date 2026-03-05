@@ -1,5 +1,5 @@
 /**
- * gather-meetup.ts — Searches Meetup.com for AI safety related events.
+ * gather-meetup.ts - Searches Meetup.com for AI safety related events.
  *
  * Uses Meetup's public GraphQL API (no auth needed for search).
  *
@@ -292,7 +292,7 @@ async function main() {
   if (rejected.length > 0) {
     console.log(`\n🚫 Pre-filter rejected ${rejected.length} irrelevant events:`);
     for (const r of rejected) {
-      console.log(`   ✗ "${r.event.title}" — ${r.reason}`);
+      console.log(`   ✗ "${r.event.title}" - ${r.reason}`);
     }
   }
   console.log(`\n  ${kept.length} events passed pre-filter (${rejected.length} rejected).`);

@@ -1,5 +1,5 @@
 /**
- * insert-program-candidates.ts — Shared utility for inserting program candidates.
+ * insert-program-candidates.ts - Shared utility for inserting program candidates.
  *
  * All program gatherers use this to insert into `program_candidates` with dedup.
  */

@@ -1,12 +1,12 @@
 import { Resource } from "@/types";
 
 /**
- * Seed data — canonical copy for development and initial DB population.
+ * Seed data - canonical copy for development and initial DB population.
  *
  * Scoring fields (admin-only, never shown publicly):
- *   ev_general  — 0-1 expected impact for an average person
- *   ev_positioned — 0-1 impact if the person is particularly well-suited
- *   friction    — 0 = one click, 1 = life-changing commitment
+ *   ev_general  - 0-1 expected impact for an average person
+ *   ev_positioned - 0-1 impact if the person is particularly well-suited
+ *   friction    - 0 = one click, 1 = life-changing commitment
  */
 export const resources: Resource[] = [
   // ─── Letters & Petitions ──────────────────────────────────
@@ -64,7 +64,7 @@ export const resources: Resource[] = [
     id: "aisafety-communities",
     title: "Join an AI safety community",
     description:
-      "Find local and online groups of people who care about AI safety — from casual to deeply technical.",
+      "Find local and online groups of people who care about AI safety, from casual to deeply technical.",
     url: "https://www.aisafety.com/communities",
     source_org: "AI Safety",
     category: "communities",
@@ -232,7 +232,7 @@ export const resources: Resource[] = [
     id: "80k-explore-careers",
     title: "Explore AI safety as a career path",
     description:
-      "80,000 Hours' guide to making AI safety your career — see what roles exist, what's needed, and how to get started.",
+      "80,000 Hours' guide to making AI safety your career. See what roles exist, what's needed, and how to get started.",
     url: "https://80000hours.org/ai/",
     source_org: "80,000 Hours",
     category: "other",
@@ -248,7 +248,7 @@ export const resources: Resource[] = [
     id: "aisafety-com-explore",
     title: "Browse AISafety.com",
     description:
-      "A comprehensive hub for the AI safety ecosystem — communities, projects, events, career resources, and more.",
+      "A comprehensive hub for the AI safety ecosystem, covering communities, projects, events, career resources, and more.",
     url: "https://www.aisafety.com/",
     source_org: "AISafety.com",
     category: "other",
@@ -264,7 +264,7 @@ export const resources: Resource[] = [
     id: "aisafety-info-learn",
     title: "Learn AI safety basics on AISafety.info",
     description:
-      "Clear, sourced explanations of AI safety concepts — from alignment basics to open research questions. Great starting point.",
+      "Clear, sourced explanations of AI safety concepts, from alignment basics to open research questions. Great starting point.",
     url: "https://aisafety.info/",
     source_org: "AI Safety Info",
     category: "other",
@@ -280,7 +280,7 @@ export const resources: Resource[] = [
     id: "adolescence-of-technology",
     title: "Read 'The Adolescence of Technology' by Dario Amodei",
     description:
-      "Anthropic's CEO on the risks powerful AI poses to national security, economies, and democracy — and how we can defend against them.",
+      "Anthropic's CEO on the risks powerful AI poses to national security, economies, and democracy, and how we can defend against them.",
     url: "https://www.darioamodei.com/essay/the-adolescence-of-technology",
     source_org: "Dario Amodei",
     category: "other",
@@ -296,7 +296,7 @@ export const resources: Resource[] = [
     id: "ai-2027",
     title: "Read AI 2027",
     description:
-      "A detailed scenario of what AI development might look like in the near future — informed by forecasting, wargames, and expert feedback.",
+      "A detailed scenario of what AI development might look like in the near future, informed by forecasting, wargames, and expert feedback.",
     url: "https://ai-2027.com/",
     source_org: "AI Futures Project",
     category: "other",
@@ -312,7 +312,7 @@ export const resources: Resource[] = [
     id: "preparing-intelligence-explosion",
     title: "Read 'Preparing for the Intelligence Explosion'",
     description:
-      "MacAskill and Moorhouse argue that advanced AI could compress a century of progress into a decade — and society needs to prepare now.",
+      "MacAskill and Moorhouse argue that advanced AI could compress a century of progress into a decade, and that society needs to prepare now.",
     url: "https://www.forethought.org/research/preparing-for-the-intelligence-explosion",
     source_org: "Forethought Foundation",
     category: "other",
@@ -346,7 +346,7 @@ export const resources: Resource[] = [
     id: "aisafety-field-map",
     title: "Explore the AI safety field map",
     description:
-      "Get a visual overview of the entire AI safety landscape — who's working on what and why.",
+      "Get a visual overview of the entire AI safety landscape: who's working on what and why.",
     url: "https://www.aisafety.com/map",
     source_org: "AI Safety",
     category: "other",
@@ -378,7 +378,7 @@ export const resources: Resource[] = [
     id: "fli-asset-pack",
     title: "Share AI safety content on social media",
     description:
-      "Use the Future of Life Institute's ready-made asset pack — images, videos, and posts you can share right now.",
+      "Use the Future of Life Institute's ready-made asset pack with images, videos, and posts you can share right now.",
     url: "https://futureoflife.org/take-action/asset-pack/",
     source_org: "Future of Life Institute",
     category: "other",
@@ -394,7 +394,7 @@ export const resources: Resource[] = [
     id: "donation-guide",
     title: "Donate to AI safety organizations",
     description:
-      "Browse a guide to effective donations for AI safety — from $10 to $10,000+.",
+      "Browse a guide to effective donations for AI safety, from $10 to $10,000+.",
     url: "https://www.aisafety.com/donation-guide",
     source_org: "AI Safety",
     category: "other",
@@ -410,7 +410,7 @@ export const resources: Resource[] = [
     id: "controlai-legislators",
     title: "Contact your legislators about AI safety",
     description:
-      "ControlAI makes it easy — pick your issue, get a script, and find your representative.",
+      "ControlAI makes it easy: pick your issue, get a script, and find your representative.",
     url: "https://controlai.com/take-action/choose",
     source_org: "ControlAI",
     category: "other",
@@ -474,7 +474,7 @@ export const resources: Resource[] = [
     id: "create-content",
     title: "Create content about AI safety",
     description:
-      "Write a blog post, make a video, record a podcast — use your platform to spread understanding.",
+      "Write a blog post, make a video, or record a podcast to spread understanding.",
     url: "https://pauseai.info/communicate",
     source_org: "PauseAI",
     category: "other",
@@ -492,7 +492,7 @@ export const resources: Resource[] = [
     id: "volunteer-projects",
     title: "Volunteer on an AI safety project",
     description:
-      "Contribute your skills to active projects — from research to engineering to ops.",
+      "Contribute your skills to active projects, from research to engineering to ops.",
     url: "https://www.aisafety.com/projects",
     source_org: "AI Safety",
     category: "other",
@@ -510,7 +510,7 @@ export const resources: Resource[] = [
     id: "80k-ai-safety",
     title: "Explore a career in AI safety",
     description:
-      "80,000 Hours' comprehensive guide to making AI safety your career — highest-impact paths, what's needed, how to start.",
+      "80,000 Hours' comprehensive guide to making AI safety your career, covering the highest-impact paths, what's needed, and how to start.",
     url: "https://80000hours.org/ai/",
     source_org: "80,000 Hours",
     category: "other",

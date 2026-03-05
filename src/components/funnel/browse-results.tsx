@@ -393,7 +393,7 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
           </motion.div>
         </AnimatePresence>
 
-        {/* Guide CTA — shown on career path */}
+        {/* Guide CTA - shown on career path */}
         {activePath === "career" && <GuideCTA />}
 
         <div className="pb-8" />
@@ -708,7 +708,7 @@ function ConnectExplorer({ resources, variant, geo, onClickTrack, onLocationChan
       items = items.filter((r) => isOnline(r) || r.location.toLowerCase() === "global");
     }
 
-    // Sort — always factor in nearness for communities & events
+    // Sort - always factor in nearness for communities & events
     if (sort === "relevance") {
       if (tab === "events") {
         // Nearness first, then date within same nearness tier

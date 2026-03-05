@@ -32,7 +32,7 @@ type ResultItem =
 interface ResultsProps {
   variant: Variant;
   answers: UserAnswers;
-  /** Pre-computed items from ProcessingFlow (Variant A) — skips init when provided */
+  /** Pre-computed items from ProcessingFlow (Variant A) - skips init when provided */
   precomputedItems?: ResultItem[];
   /** Pre-computed geo from ProcessingFlow */
   precomputedGeo?: GeoData;
@@ -450,7 +450,7 @@ function LocalCardGroup({ card, variant, geo, onClickTrack, onLocationChange }: 
         : "communities & events";
 
   if (!card) {
-    // Empty state — no events/communities at this location
+    // Empty state - no events/communities at this location
     return (
       <div className="rounded-xl border border-border bg-card px-5 py-5">
         <p className="text-sm text-muted-foreground">
@@ -532,7 +532,7 @@ function LocalCardGroup({ card, variant, geo, onClickTrack, onLocationChange }: 
         </div>
       )}
 
-      {/* No extras but has anchor — show location in a subtle footer */}
+      {/* No extras but has anchor - show location in a subtle footer */}
       {extras.length === 0 && geo && (
         <div className="mt-[-4px] ml-2 mr-2">
           <div className="rounded-b-xl border border-t-0 border-border bg-card/80 px-4 py-2 text-xs text-muted-foreground">

@@ -1,4 +1,4 @@
--- howdoihelp.ai — Supabase schema
+-- howdoihelp.ai - Supabase schema
 -- Run this migration to set up the resource database.
 
 -- Resources table

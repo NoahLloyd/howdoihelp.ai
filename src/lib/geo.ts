@@ -115,7 +115,7 @@ export async function getGeoData(): Promise<GeoData> {
     // Fall through to next provider
   }
 
-  // Fallback 3: ip-api.com (HTTP only — works in dev/non-HTTPS contexts)
+  // Fallback 3: ip-api.com (HTTP only - works in dev/non-HTTPS contexts)
   try {
     const res = await fetch("http://ip-api.com/json/?fields=country,countryCode,city,regionName,timezone", {
       signal: AbortSignal.timeout(3000),

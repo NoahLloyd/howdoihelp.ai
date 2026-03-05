@@ -46,12 +46,12 @@ export async function proxy(request: NextRequest) {
       }
     );
 
-    // Refresh the session — MUST call getUser() not getSession()
+    // Refresh the session - MUST call getUser() not getSession()
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // Protect /dashboard/* — redirect to login if not authenticated
+    // Protect /dashboard/* - redirect to login if not authenticated
     if (!user && request.nextUrl.pathname.startsWith("/dashboard")) {
       const loginUrl = new URL("/auth/login", request.url);
       loginUrl.searchParams.set("next", request.nextUrl.pathname);

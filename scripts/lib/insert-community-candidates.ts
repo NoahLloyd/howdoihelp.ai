@@ -1,5 +1,5 @@
 /**
- * insert-community-candidates.ts — Shared utility for inserting community candidates.
+ * insert-community-candidates.ts - Shared utility for inserting community candidates.
  *
  * All community gatherers use this to insert into `community_candidates` with dedup.
  */

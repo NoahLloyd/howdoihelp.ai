@@ -28,7 +28,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("❌ Missing SUPABASE env vars — check .env.local");
+  console.error("❌ Missing SUPABASE env vars - check .env.local");
   process.exit(1);
 }
 
@@ -300,7 +300,7 @@ async function syncToDatabase(communities: CommunityEntry[]) {
 
   if (DRY_RUN) {
     for (const comm of communities) {
-      console.log(`   ➕ CANDIDATE: "${comm.title}" (${comm.source}) — ${comm.url}`);
+      console.log(`   ➕ CANDIDATE: "${comm.title}" (${comm.source}) - ${comm.url}`);
     }
     console.log(`\n✅ Dry run complete: ${communities.length} communities would be inserted as candidates.`);
     return;
@@ -328,7 +328,7 @@ async function syncToDatabase(communities: CommunityEntry[]) {
 // ─── Main ──────────────────────────────────────────────────
 
 async function main() {
-  console.log(`🔄 Community Sync — ${DRY_RUN ? "DRY RUN" : "LIVE"}`);
+  console.log(`🔄 Community Sync - ${DRY_RUN ? "DRY RUN" : "LIVE"}`);
   console.log(`   ${new Date().toISOString()}\n`);
 
   // Fetch from all sources in parallel

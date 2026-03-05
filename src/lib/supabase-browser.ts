@@ -5,7 +5,7 @@ let _client: SupabaseClient | null = null;
 
 /**
  * Browser-side Supabase client with auth support.
- * Singleton — safe to call multiple times.
+ * Singleton - safe to call multiple times.
  */
 export function createAuthBrowserClient(): SupabaseClient {
   if (_client) return _client;

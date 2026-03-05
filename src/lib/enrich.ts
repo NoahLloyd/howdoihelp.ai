@@ -5,9 +5,9 @@ import { llmComplete, extractJson } from "./llm";
 
 // ─── LLM Profile Extraction ────────────────────────────────
 
-const EXTRACT_PROMPT = `You are extracting structured profile data from a LinkedIn profile's text content. The text is messy — it was stripped from HTML and contains navigation elements, duplicates, and junk.
+const EXTRACT_PROMPT = `You are extracting structured profile data from a LinkedIn profile's text content. The text is messy - it was stripped from HTML and contains navigation elements, duplicates, and junk.
 
-WARNING: This text is scraped and noisy. It often contains content that is NOT about the profile owner — for example, posts by OTHER people that this person merely liked or commented on, names of connections, or unrelated text from the page. You must carefully distinguish between:
+WARNING: This text is scraped and noisy. It often contains content that is NOT about the profile owner - for example, posts by OTHER people that this person merely liked or commented on, names of connections, or unrelated text from the page. You must carefully distinguish between:
 - Information that is ACTUALLY about this person (their own name, headline, job title, company, education, skills, about section)
 - Information about OTHER people or content this person simply interacted with
 
@@ -17,16 +17,16 @@ Return ONLY valid JSON, no markdown fences or explanation.
 
 {
   "fullName": "string or null",
-  "headline": "string or null — their tagline/bio that appears right below their name",
-  "currentTitle": "string or null — current job title",
-  "currentCompany": "string or null — current employer/company",
+  "headline": "string or null - their tagline/bio that appears right below their name",
+  "currentTitle": "string or null - current job title",
+  "currentCompany": "string or null - current employer/company",
   "location": "string or null",
-  "summary": "string or null — their About section text, condensed to 2-3 sentences max",
+  "summary": "string or null - their About section text, condensed to 2-3 sentences max",
   "experience": [{"title": "string", "company": "string"}],
   "education": [{"school": "string", "degree": "string or null", "field": "string or null"}],
   "certifications": ["Name (Issuer)"],
   "awards": ["Award name: description if available"],
-  "volunteer": ["Role at Org — description if available"],
+  "volunteer": ["Role at Org - description if available"],
   "publications": ["Title in Journal"],
   "languages": ["Language (proficiency if shown)"],
   "skills": ["skills, tools, technologies, or professional interests mentioned anywhere"]
@@ -34,11 +34,11 @@ Return ONLY valid JSON, no markdown fences or explanation.
 
 IMPORTANT:
 - The profile owner's name, headline, and About section typically appear near the top of the text. Use these as your anchor for who this person is.
-- COMPLETELY IGNORE any "Activity" section — posts, likes, comments, reposts. These show OTHER people's content. Never attribute activity feed content to the profile owner.
-- If you see text in a different language that doesn't match the person's profile language, it is almost certainly from someone else's post — ignore it.
+- COMPLETELY IGNORE any "Activity" section - posts, likes, comments, reposts. These show OTHER people's content. Never attribute activity feed content to the profile owner.
+- If you see text in a different language that doesn't match the person's profile language, it is almost certainly from someone else's post - ignore it.
 - Look for experience entries even if they're just company names without explicit titles
 - Look for education even if it's just a school name
-- The "About" section text is the most valuable — capture it fully
+- The "About" section text is the most valuable - capture it fully
 - If someone lists courses, articles, or projects, extract relevant skills from those
 - Languages are sometimes listed with proficiency levels (Native, Professional, etc.)
 - Only include skills, experience, and other details you are confident belong to this specific person`;
@@ -446,7 +446,7 @@ function isProfileMeaningful(profile: EnrichedProfile | null): boolean {
   );
 }
 
-/** Merge two profiles — take the richer value for each field */
+/** Merge two profiles - take the richer value for each field */
 function mergeProfiles(base: EnrichedProfile, overlay: Partial<EnrichedProfile>): EnrichedProfile {
   return {
     ...base,
@@ -482,7 +482,7 @@ export async function enrichProfile(opts: {
     const scraped = await scrapeLinkedInProfile(opts.url);
     usageLog.push(scraped.usage);
 
-    // Always call Claude if we have raw text — it handles every profile layout
+    // Always call Claude if we have raw text - it handles every profile layout
     if (scraped.rawText && scraped.rawText.length > 100) {
       const claude = await llmExtractProfile(scraped.rawText, opts.url);
       usageLog.push(claude.usage);
@@ -504,7 +504,7 @@ export async function enrichProfile(opts: {
     return { profile: null, usageLog };
   }
 
-  // LinkedIn via email only (from OAuth) — no URL to scrape
+  // LinkedIn via email only (from OAuth) - no URL to scrape
   if (platform === "linkedin" && !opts.url) {
     return { profile: null, usageLog };
   }

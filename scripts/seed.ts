@@ -1,5 +1,5 @@
 /**
- * Seed script — loads resources from data/resources.ts into Supabase.
+ * Seed script - loads resources from data/resources.ts into Supabase.
  *
  * Usage:  npx tsx scripts/seed.ts
  */

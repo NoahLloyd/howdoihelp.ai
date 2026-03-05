@@ -34,7 +34,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("❌ Missing SUPABASE env vars — check .env.local");
+  console.error("❌ Missing SUPABASE env vars - check .env.local");
   process.exit(1);
 }
 
@@ -79,7 +79,7 @@ async function checkUrl(url: string): Promise<UrlCheckResult> {
       return { status: "reachable", httpCode: res.status, notes };
     }
 
-    // Some servers don't support HEAD — try GET
+    // Some servers don't support HEAD - try GET
     if (res.status === 405 || res.status === 403) {
       const getRes = await fetch(url, {
         method: "GET",
@@ -173,7 +173,7 @@ function scoreActivity(input: ScoringInput): { score: number; notes: string[] } 
     domain.includes("forum.effectivealtruism.org") ||
     domain.includes("lesswrong.com")
   ) {
-    // Forum group page — it's an index page, not a standalone community
+    // Forum group page - it's an index page, not a standalone community
     score += 0.1;
     notes.push("Forum group page");
   } else if (domain.includes("instagram.com")) {
@@ -210,7 +210,7 @@ function scoreActivity(input: ScoringInput): { score: number; notes: string[] } 
   } else if (input.source === "pauseai") {
     score += 0.1;
   } else {
-    // aisafety.com scrape — less reliable
+    // aisafety.com scrape - less reliable
     score += 0.05;
   }
 
@@ -252,7 +252,7 @@ async function processBatch<T, R>(
 // ─── Main ──────────────────────────────────────────────────
 
 async function main() {
-  console.log(`🔍 Community Verification — ${DRY_RUN ? "DRY RUN" : "LIVE"}`);
+  console.log(`🔍 Community Verification - ${DRY_RUN ? "DRY RUN" : "LIVE"}`);
   console.log(`   ${new Date().toISOString()}\n`);
 
   // Fetch communities to verify
