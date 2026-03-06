@@ -1,9 +1,22 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
 type Provider = "perplexity" | "exa" | "tavily";
+
+const PROVIDERS: { id: Provider; label: string; color: string; description: string }[] = [
+  { id: "perplexity", label: "Perplexity", color: "text-blue-500", description: "AI search with custom prompt" },
+  { id: "exa", label: "Exa", color: "text-violet-500", description: "People search index" },
+  { id: "tavily", label: "Tavily", color: "text-amber-500", description: "Web search with domain filtering" },
+];
+
+const PROVIDER_COLORS: Record<Provider, { bg: string; border: string; text: string; dot: string }> = {
+  perplexity: { bg: "bg-blue-500/5", border: "border-blue-500/20", text: "text-blue-500", dot: "bg-blue-500" },
+  exa: { bg: "bg-violet-500/5", border: "border-violet-500/20", text: "text-violet-500", dot: "bg-violet-500" },
+  tavily: { bg: "bg-amber-500/5", border: "border-amber-500/20", text: "text-amber-500", dot: "bg-amber-500" },
+};
 
 const DEFAULT_PERPLEXITY_PROMPT = `Search for this specific person and report ONLY facts you can verify from search results. Do NOT guess, infer, or fill in gaps.
 
@@ -47,6 +60,45 @@ interface PromptResult {
 interface ScrapeResult {
   profile: Record<string, unknown> | null;
   platform: string;
+}
+
+function ProviderPill({
+  provider,
+  selected,
+  onClick,
+}: {
+  provider: (typeof PROVIDERS)[number];
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const colors = PROVIDER_COLORS[provider.id];
+  return (
+    <button
+      onClick={onClick}
+      className={`relative px-3 py-1.5 text-[11px] font-medium rounded-full border transition-all duration-150 cursor-pointer
+        ${selected
+          ? `${colors.bg} ${colors.border} ${colors.text}`
+          : "bg-transparent border-border text-muted hover:text-foreground hover:border-border/80"
+        }`}
+    >
+      <span className="flex items-center gap-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full ${selected ? colors.dot : "bg-muted/50"}`} />
+        {provider.label}
+      </span>
+    </button>
+  );
+}
+
+function StatBadge({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono
+        ${accent ? "bg-accent/10 text-accent" : "bg-foreground/5 text-muted"}`}
+    >
+      <span className="opacity-60">{label}</span>
+      {value}
+    </span>
+  );
 }
 
 export default function PromptTesterPage() {
@@ -143,7 +195,6 @@ export default function PromptTesterPage() {
         const data = await res.json();
         setScrapeResult(data);
       } else if (q) {
-        // Use search-profile for name-based lookup
         const res = await fetch("/api/search-profile", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -185,233 +236,390 @@ export default function PromptTesterPage() {
     }
   }
 
+  function renderResult(result: PromptResult | null, label: string, ref: React.RefObject<HTMLDivElement | null>) {
+    const providerInfo = result?.provider ? PROVIDER_COLORS[result.provider] : null;
+
+    return (
+      <motion.section
+        ref={ref}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        className={`p-5 rounded-xl border transition-colors
+          ${providerInfo ? `${providerInfo.bg} ${providerInfo.border}` : "bg-card border-border"}`}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-medium text-foreground">{label}</h2>
+            {result?.provider && (
+              <span className={`flex items-center gap-1.5 text-[10px] font-mono ${PROVIDER_COLORS[result.provider].text}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${PROVIDER_COLORS[result.provider].dot}`} />
+                {result.provider}
+              </span>
+            )}
+          </div>
+          {result && (
+            <div className="flex items-center gap-1.5">
+              <StatBadge label="" value={`${result.durationMs}ms`} accent />
+              {result.inputTokens > 0 && (
+                <StatBadge label="" value={`${result.inputTokens}in / ${result.outputTokens}out`} />
+              )}
+            </div>
+          )}
+        </div>
+        {result ? (
+          <>
+            <div className="text-[13px] text-muted-foreground bg-background/80 p-4 rounded-lg
+              overflow-auto max-h-[600px] whitespace-pre-wrap break-words border border-border/30
+              leading-relaxed backdrop-blur-sm">
+              {result.text}
+            </div>
+            {result.citations.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-border/30">
+                <h3 className="text-[10px] font-medium text-muted uppercase tracking-wider mb-2">
+                  Citations ({result.citations.length})
+                </h3>
+                <div className="flex flex-col gap-1">
+                  {result.citations.map((c, i) => (
+                    <a
+                      key={i}
+                      href={c}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-accent hover:underline truncate block"
+                    >
+                      {c}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="py-16 text-center">
+            <div className="text-muted/40 text-2xl mb-2">~</div>
+            <div className="text-muted text-xs italic">Waiting for results</div>
+          </div>
+        )}
+      </motion.section>
+    );
+  }
+
   return (
     <div className="min-h-dvh bg-background px-6 py-10 max-w-7xl mx-auto">
       {/* Header */}
-      <header className="mb-8">
-        <div className="flex items-center gap-3 mb-1">
-          <Link href="/admin" className="text-muted hover:text-foreground text-sm">
+      <motion.header
+        className="mb-10"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <div className="flex items-center gap-2 mb-1 text-sm">
+          <Link href="/admin" className="text-muted hover:text-foreground transition-colors">
             Dashboard
           </Link>
-          <span className="text-muted">/</span>
-          <h1 className="text-xl font-semibold text-foreground tracking-tight">
-            Prompt Tester
-          </h1>
+          <span className="text-border">/</span>
+          <span className="text-foreground font-medium">Prompt Tester</span>
         </div>
+        <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-2">
+          Search Provider Testing
+        </h1>
         <p className="text-sm text-muted mt-1">
-          Test search providers and prompts against real queries. Compare results side-by-side.
+          Compare search providers and prompts side-by-side with real queries.
         </p>
-      </header>
+      </motion.header>
 
       {/* Error */}
-      {error && (
-        <div className="mb-6 px-4 py-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-sm text-rose-500">
-          {error}
-          <button
-            onClick={() => setError(null)}
-            className="ml-3 underline cursor-pointer"
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, y: -8, height: 0 }}
+            className="mb-6 px-4 py-3 bg-rose-500/8 border border-rose-500/15 rounded-xl text-sm text-rose-500
+              flex items-center justify-between"
           >
-            dismiss
-          </button>
-        </div>
-      )}
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="ml-3 text-rose-500/60 hover:text-rose-500 text-xs cursor-pointer"
+            >
+              dismiss
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Input Section */}
-      <section className="mb-8 p-5 bg-card border border-border rounded-xl">
-        <h2 className="text-sm font-medium text-foreground mb-4">Test Input</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-xs text-muted mb-1.5">
-              Person Name / Query
-            </label>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="e.g. Noah Lloyd AI safety Nashville"
-              className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm
-                text-foreground placeholder:text-muted outline-none focus:border-accent"
-            />
+      <motion.section
+        className="mb-8"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+      >
+        <div className="p-6 bg-card border border-border rounded-2xl">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="w-2 h-2 rounded-full bg-accent" />
+            <h2 className="text-sm font-medium text-foreground">Test Input</h2>
           </div>
-          <div>
-            <label className="block text-xs text-muted mb-1.5">
-              LinkedIn URL (optional)
-            </label>
-            <input
-              type="text"
-              value={linkedinUrl}
-              onChange={(e) => setLinkedinUrl(e.target.value)}
-              placeholder="https://linkedin.com/in/username"
-              className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm
-                text-foreground placeholder:text-muted outline-none focus:border-accent"
-            />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+            <div>
+              <label className="block text-[11px] font-medium text-muted uppercase tracking-wider mb-2">
+                Person / Query
+              </label>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="e.g. Noah Lloyd AI safety Nashville"
+                className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm
+                  text-foreground placeholder:text-muted/50 outline-none focus:border-accent
+                  focus:ring-1 focus:ring-accent/20 transition-all"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && query.trim()) {
+                    runPrompt(promptA, providerA, setResultA, setLoadingA);
+                    if (providerB !== "perplexity" || promptB.trim()) {
+                      runPrompt(promptB, providerB, setResultB, setLoadingB);
+                    }
+                  }
+                }}
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-muted uppercase tracking-wider mb-2">
+                Profile URL <span className="text-muted/50 font-normal normal-case">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={linkedinUrl}
+                onChange={(e) => setLinkedinUrl(e.target.value)}
+                placeholder="https://linkedin.com/in/username"
+                className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm
+                  text-foreground placeholder:text-muted/50 outline-none focus:border-accent
+                  focus:ring-1 focus:ring-accent/20 transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={runScrape}
+              disabled={loadingScrape}
+              className="px-4 py-2 text-xs font-medium bg-background text-foreground
+                border border-border rounded-lg hover:bg-card-hover transition-colors
+                disabled:opacity-40 cursor-pointer"
+            >
+              {loadingScrape ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-3 h-3 border-2 border-muted/30 border-t-muted rounded-full animate-spin" />
+                  Scraping...
+                </span>
+              ) : (
+                "Scrape Profile"
+              )}
+            </button>
+            <button
+              onClick={runEnrich}
+              disabled={loadingScrape || !linkedinUrl.trim()}
+              className="px-4 py-2 text-xs font-medium bg-background text-foreground
+                border border-border rounded-lg hover:bg-card-hover transition-colors
+                disabled:opacity-40 cursor-pointer"
+            >
+              Full Enrich
+            </button>
+            <div className="flex-1" />
+            <span className="text-[10px] text-muted/50 font-mono">
+              enter to run both
+            </span>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={runScrape}
-            disabled={loadingScrape}
-            className="px-4 py-2 text-xs font-medium bg-foreground/10 text-foreground
-              border border-border rounded-lg hover:bg-foreground/20 transition-colors
-              disabled:opacity-40 cursor-pointer"
-          >
-            {loadingScrape ? "Scraping..." : "Scrape Profile"}
-          </button>
-          <button
-            onClick={runEnrich}
-            disabled={loadingScrape || !linkedinUrl.trim()}
-            className="px-4 py-2 text-xs font-medium bg-foreground/10 text-foreground
-              border border-border rounded-lg hover:bg-foreground/20 transition-colors
-              disabled:opacity-40 cursor-pointer"
-          >
-            {loadingScrape ? "..." : "Full Enrich"}
-          </button>
-        </div>
-      </section>
+      </motion.section>
 
       {/* Scrape Results */}
-      {scrapeResult && (
-        <section className="mb-8 p-5 bg-card border border-border rounded-xl">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-foreground">
-              Scrape Result
-              <span className="ml-2 text-xs text-muted font-mono">
-                ({scrapeResult.platform})
-              </span>
-            </h2>
-            <button
-              onClick={() => setScrapeResult(null)}
-              className="text-xs text-muted hover:text-foreground cursor-pointer"
-            >
-              clear
-            </button>
-          </div>
-          <pre className="text-xs text-muted-foreground bg-background p-4 rounded-lg
-            overflow-auto max-h-[400px] whitespace-pre-wrap break-words border border-border/50">
-            {JSON.stringify(scrapeResult.profile, null, 2)}
-          </pre>
-        </section>
-      )}
+      <AnimatePresence>
+        {scrapeResult && (
+          <motion.section
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-8"
+          >
+            <div className="p-6 bg-card border border-border rounded-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <h2 className="text-sm font-medium text-foreground">Scrape Result</h2>
+                  <span className="text-[10px] font-mono text-muted bg-foreground/5 px-2 py-0.5 rounded-full">
+                    {scrapeResult.platform}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setScrapeResult(null)}
+                  className="text-[11px] text-muted hover:text-foreground cursor-pointer transition-colors"
+                >
+                  clear
+                </button>
+              </div>
+              <pre className="text-xs text-muted-foreground bg-background p-4 rounded-xl
+                overflow-auto max-h-[400px] whitespace-pre-wrap break-words border border-border/50
+                font-mono leading-relaxed">
+                {JSON.stringify(scrapeResult.profile, null, 2)}
+              </pre>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
 
-      {/* Prompt Editors */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Prompt A */}
-        <section className="p-5 bg-card border border-border rounded-xl">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-medium text-foreground">
-                Prompt A
-              </h2>
-              <select
-                value={providerA}
-                onChange={(e) => setProviderA(e.target.value as Provider)}
-                className="px-2 py-1 text-[11px] bg-background border border-border rounded-md
-                  text-foreground outline-none focus:border-accent cursor-pointer"
-              >
-                <option value="perplexity">Perplexity</option>
-                <option value="exa">Exa</option>
-                <option value="tavily">Tavily</option>
-              </select>
+      {/* Provider Panels */}
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        {/* Panel A */}
+        <div className="p-6 bg-card border border-border rounded-2xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-md bg-foreground/8 text-[10px] font-bold text-foreground">
+                A
+              </span>
+              <h2 className="text-sm font-medium text-foreground">Source A</h2>
             </div>
             <button
               onClick={() => setPromptA(DEFAULT_PERPLEXITY_PROMPT)}
-              className="text-xs text-muted hover:text-foreground cursor-pointer"
+              className="text-[11px] text-muted hover:text-foreground cursor-pointer transition-colors"
             >
-              reset
+              reset prompt
             </button>
           </div>
-          {providerA === "perplexity" && (
+
+          {/* Provider pills */}
+          <div className="flex gap-1.5 mb-4">
+            {PROVIDERS.map((p) => (
+              <ProviderPill
+                key={p.id}
+                provider={p}
+                selected={providerA === p.id}
+                onClick={() => setProviderA(p.id)}
+              />
+            ))}
+          </div>
+
+          {/* Prompt editor or description */}
+          {providerA === "perplexity" ? (
             <textarea
               value={promptA}
               onChange={(e) => setPromptA(e.target.value)}
-              rows={6}
-              className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-xs
-                text-foreground font-mono leading-relaxed resize-y outline-none focus:border-accent mb-3"
+              rows={5}
+              className="w-full px-3 py-2.5 bg-background border border-border rounded-xl text-xs
+                text-foreground font-mono leading-relaxed resize-y outline-none focus:border-accent
+                focus:ring-1 focus:ring-accent/20 transition-all mb-4"
             />
+          ) : (
+            <div className={`px-4 py-3 rounded-xl border mb-4 ${PROVIDER_COLORS[providerA].bg} ${PROVIDER_COLORS[providerA].border}`}>
+              <p className={`text-xs ${PROVIDER_COLORS[providerA].text}`}>
+                {PROVIDERS.find((p) => p.id === providerA)?.description} — no prompt needed.
+              </p>
+            </div>
           )}
-          {providerA !== "perplexity" && (
-            <p className="text-xs text-muted-foreground mb-3 px-1">
-              {providerA === "exa" ? "Exa uses its people search index — no prompt needed." : "Tavily uses web search with domain filtering — no prompt needed."}
-            </p>
-          )}
+
           <button
             onClick={() => runPrompt(promptA, providerA, setResultA, setLoadingA)}
             disabled={loadingA}
-            className="px-5 py-2.5 text-xs font-medium bg-foreground text-background
-              rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer"
+            className="w-full px-5 py-2.5 text-xs font-medium bg-foreground text-background
+              rounded-xl hover:opacity-90 transition-all disabled:opacity-40 cursor-pointer"
           >
             {loadingA ? (
-              <span className="flex items-center gap-2">
+              <span className="flex items-center justify-center gap-2">
                 <span className="w-3 h-3 border-2 border-background/30 border-t-background rounded-full animate-spin" />
-                Running...
+                Searching...
               </span>
             ) : (
-              `Run ${providerA === "perplexity" ? "Prompt" : ""} A (${providerA})`
+              <span className="flex items-center justify-center gap-1.5">
+                Run A
+                <span className="opacity-50">({providerA})</span>
+              </span>
             )}
           </button>
-        </section>
+        </div>
 
-        {/* Prompt B */}
-        <section className="p-5 bg-card border border-border rounded-xl">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-medium text-foreground">
-                Prompt B
-              </h2>
-              <select
-                value={providerB}
-                onChange={(e) => setProviderB(e.target.value as Provider)}
-                className="px-2 py-1 text-[11px] bg-background border border-border rounded-md
-                  text-foreground outline-none focus:border-accent cursor-pointer"
-              >
-                <option value="perplexity">Perplexity</option>
-                <option value="exa">Exa</option>
-                <option value="tavily">Tavily</option>
-              </select>
+        {/* Panel B */}
+        <div className="p-6 bg-card border border-border rounded-2xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-md bg-foreground/8 text-[10px] font-bold text-foreground">
+                B
+              </span>
+              <h2 className="text-sm font-medium text-foreground">Source B</h2>
             </div>
             <button
               onClick={() => setPromptB(promptA)}
-              className="text-xs text-muted hover:text-foreground cursor-pointer"
+              className="text-[11px] text-muted hover:text-foreground cursor-pointer transition-colors"
             >
-              copy from A
+              copy prompt from A
             </button>
           </div>
-          {providerB === "perplexity" && (
+
+          {/* Provider pills */}
+          <div className="flex gap-1.5 mb-4">
+            {PROVIDERS.map((p) => (
+              <ProviderPill
+                key={p.id}
+                provider={p}
+                selected={providerB === p.id}
+                onClick={() => setProviderB(p.id)}
+              />
+            ))}
+          </div>
+
+          {/* Prompt editor or description */}
+          {providerB === "perplexity" ? (
             <textarea
               value={promptB}
               onChange={(e) => setPromptB(e.target.value)}
-              rows={6}
-              placeholder="Paste an alternative prompt here to compare..."
-              className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-xs
+              rows={5}
+              placeholder="Paste an alternative prompt here..."
+              className="w-full px-3 py-2.5 bg-background border border-border rounded-xl text-xs
                 text-foreground font-mono leading-relaxed resize-y outline-none focus:border-accent
-                placeholder:text-muted mb-3"
+                focus:ring-1 focus:ring-accent/20 transition-all placeholder:text-muted/40 mb-4"
             />
+          ) : (
+            <div className={`px-4 py-3 rounded-xl border mb-4 ${PROVIDER_COLORS[providerB].bg} ${PROVIDER_COLORS[providerB].border}`}>
+              <p className={`text-xs ${PROVIDER_COLORS[providerB].text}`}>
+                {PROVIDERS.find((p) => p.id === providerB)?.description} — no prompt needed.
+              </p>
+            </div>
           )}
-          {providerB !== "perplexity" && (
-            <p className="text-xs text-muted-foreground mb-3 px-1">
-              {providerB === "exa" ? "Exa uses its people search index — no prompt needed." : "Tavily uses web search with domain filtering — no prompt needed."}
-            </p>
-          )}
+
           <button
             onClick={() => runPrompt(promptB, providerB, setResultB, setLoadingB)}
             disabled={loadingB || (providerB === "perplexity" && !promptB.trim())}
-            className="px-5 py-2.5 text-xs font-medium bg-foreground text-background
-              rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer"
+            className="w-full px-5 py-2.5 text-xs font-medium bg-foreground text-background
+              rounded-xl hover:opacity-90 transition-all disabled:opacity-40 cursor-pointer"
           >
             {loadingB ? (
-              <span className="flex items-center gap-2">
+              <span className="flex items-center justify-center gap-2">
                 <span className="w-3 h-3 border-2 border-background/30 border-t-background rounded-full animate-spin" />
-                Running...
+                Searching...
               </span>
             ) : (
-              `Run ${providerB === "perplexity" ? "Prompt" : ""} B (${providerB})`
+              <span className="flex items-center justify-center gap-1.5">
+                Run B
+                <span className="opacity-50">({providerB})</span>
+              </span>
             )}
           </button>
-        </section>
-      </div>
+        </div>
+      </motion.div>
 
-      {/* Run Both Button */}
-      <div className="flex justify-center mb-8">
+      {/* Run Both */}
+      <motion.div
+        className="flex justify-center mb-10"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.15 }}
+      >
         <button
           onClick={() => {
             runPrompt(promptA, providerA, setResultA, setLoadingA);
@@ -420,163 +628,141 @@ export default function PromptTesterPage() {
             }
           }}
           disabled={loadingA || loadingB || !query.trim()}
-          className="px-8 py-3 text-sm font-medium bg-accent text-white
-            rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer"
+          className="group px-10 py-3 text-sm font-medium bg-accent text-white
+            rounded-xl hover:bg-accent-hover transition-all disabled:opacity-40 cursor-pointer
+            shadow-sm shadow-accent/20 hover:shadow-md hover:shadow-accent/25"
         >
-          {loadingA || loadingB ? "Running..." : "Run Both"}
+          {loadingA || loadingB ? (
+            <span className="flex items-center gap-2">
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Running...
+            </span>
+          ) : (
+            "Run Both"
+          )}
         </button>
-      </div>
+      </motion.div>
 
       {/* Results Comparison */}
-      {(resultA || resultB) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Result A */}
-          <section ref={resultARef} className="p-5 bg-card border border-border rounded-xl">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-foreground">
-                Result A
-                {resultA?.provider && <span className="ml-2 text-xs text-muted font-normal">({resultA.provider})</span>}
-              </h2>
-              {resultA && (
-                <div className="flex items-center gap-3 text-[11px] font-mono text-muted">
-                  <span>{resultA.durationMs}ms</span>
-                  {resultA.inputTokens > 0 && <span>{resultA.inputTokens}in / {resultA.outputTokens}out</span>}
-                </div>
+      <AnimatePresence>
+        {(resultA || resultB) && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            {/* Section header */}
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-2 h-2 rounded-full bg-accent" />
+              <h2 className="text-sm font-medium text-foreground">Results</h2>
+              {resultA && resultB && (
+                <span className="text-[10px] font-mono text-muted">
+                  {resultA.durationMs < resultB.durationMs
+                    ? `A was ${resultB.durationMs - resultA.durationMs}ms faster`
+                    : `B was ${resultA.durationMs - resultB.durationMs}ms faster`}
+                </span>
               )}
             </div>
-            {resultA ? (
-              <>
-                <div className="text-xs text-muted-foreground bg-background p-4 rounded-lg
-                  overflow-auto max-h-[600px] whitespace-pre-wrap break-words border border-border/50
-                  leading-relaxed">
-                  {resultA.text}
-                </div>
-                {resultA.citations.length > 0 && (
-                  <div className="mt-3">
-                    <h3 className="text-[11px] font-medium text-muted mb-1.5">
-                      Citations ({resultA.citations.length})
-                    </h3>
-                    <div className="flex flex-col gap-1">
-                      {resultA.citations.map((c, i) => (
-                        <a
-                          key={i}
-                          href={c}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] text-accent hover:underline truncate"
-                        >
-                          {c}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="py-12 text-center text-muted text-sm italic">
-                No result yet
-              </div>
-            )}
-          </section>
 
-          {/* Result B */}
-          <section ref={resultBRef} className="p-5 bg-card border border-border rounded-xl">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-foreground">
-                Result B
-                {resultB?.provider && <span className="ml-2 text-xs text-muted font-normal">({resultB.provider})</span>}
-              </h2>
-              {resultB && (
-                <div className="flex items-center gap-3 text-[11px] font-mono text-muted">
-                  <span>{resultB.durationMs}ms</span>
-                  {resultB.inputTokens > 0 && <span>{resultB.inputTokens}in / {resultB.outputTokens}out</span>}
-                </div>
-              )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+              {renderResult(resultA, "Result A", resultARef)}
+              {renderResult(resultB, "Result B", resultBRef)}
             </div>
-            {resultB ? (
-              <>
-                <div className="text-xs text-muted-foreground bg-background p-4 rounded-lg
-                  overflow-auto max-h-[600px] whitespace-pre-wrap break-words border border-border/50
-                  leading-relaxed">
-                  {resultB.text}
-                </div>
-                {resultB.citations.length > 0 && (
-                  <div className="mt-3">
-                    <h3 className="text-[11px] font-medium text-muted mb-1.5">
-                      Citations ({resultB.citations.length})
-                    </h3>
-                    <div className="flex flex-col gap-1">
-                      {resultB.citations.map((c, i) => (
-                        <a
-                          key={i}
-                          href={c}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] text-accent hover:underline truncate"
-                        >
-                          {c}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="py-12 text-center text-muted text-sm italic">
-                {promptB.trim() ? "No result yet" : "Add a Prompt B to compare"}
-              </div>
-            )}
-          </section>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* History */}
-      {history.length > 0 && (
-        <section className="p-5 bg-card border border-border rounded-xl">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-medium text-foreground">
-              History
-              <span className="ml-2 text-xs text-muted font-normal">
-                ({history.length} runs)
-              </span>
-            </h2>
-            <button
-              onClick={() => setHistory([])}
-              className="text-xs text-muted hover:text-foreground cursor-pointer"
-            >
-              clear
-            </button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {history.map((h, i) => (
-              <details key={i} className="group">
-                <summary className="flex items-center justify-between px-3 py-2 rounded-lg
-                  bg-background hover:bg-foreground/5 cursor-pointer text-sm">
-                  <div className="flex items-center gap-3">
-                    <span className="text-foreground font-medium">{h.query}</span>
-                    {h.provider && <span className="text-[10px] font-mono text-accent/70 bg-accent/10 px-1.5 py-0.5 rounded">{h.provider}</span>}
-                    <span className="text-[11px] font-mono text-muted">
-                      {h.durationMs}ms
-                    </span>
-                  </div>
-                  <span className="text-[11px] font-mono text-muted">
-                    {new Date(h.timestamp).toLocaleTimeString()}
+      <AnimatePresence>
+        {history.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="pb-10"
+          >
+            <div className="p-6 bg-card border border-border rounded-2xl">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-muted" />
+                  <h2 className="text-sm font-medium text-foreground">History</h2>
+                  <span className="text-[10px] font-mono text-muted bg-foreground/5 px-2 py-0.5 rounded-full">
+                    {history.length} runs
                   </span>
-                </summary>
-                <div className="mt-2 ml-3">
-                  <div className="text-[11px] text-muted mb-2 font-mono bg-background/50 p-2 rounded">
-                    Prompt: {h.prompt.slice(0, 120)}...
-                  </div>
-                  <pre className="text-xs text-muted-foreground bg-background p-3 rounded-lg
-                    overflow-auto max-h-[300px] whitespace-pre-wrap break-words border border-border/50">
-                    {h.text}
-                  </pre>
                 </div>
-              </details>
-            ))}
-          </div>
-        </section>
-      )}
+                <button
+                  onClick={() => setHistory([])}
+                  className="text-[11px] text-muted hover:text-foreground cursor-pointer transition-colors"
+                >
+                  clear all
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                {history.map((h, i) => {
+                  const providerColor = h.provider ? PROVIDER_COLORS[h.provider] : null;
+                  return (
+                    <motion.details
+                      key={`${h.timestamp}-${i}`}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.03 }}
+                      className="group"
+                    >
+                      <summary className="flex items-center justify-between px-3 py-2.5 rounded-xl
+                        hover:bg-foreground/3 cursor-pointer text-sm transition-colors">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <span className="text-foreground font-medium truncate">{h.query}</span>
+                          {h.provider && (
+                            <span className={`flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full border shrink-0
+                              ${providerColor?.bg} ${providerColor?.border} ${providerColor?.text}`}>
+                              <span className={`w-1 h-1 rounded-full ${providerColor?.dot}`} />
+                              {h.provider}
+                            </span>
+                          )}
+                          <StatBadge label="" value={`${h.durationMs}ms`} />
+                        </div>
+                        <span className="text-[10px] font-mono text-muted/50 shrink-0 ml-3">
+                          {new Date(h.timestamp).toLocaleTimeString()}
+                        </span>
+                      </summary>
+                      <div className="mt-1 ml-3 mb-2">
+                        {h.prompt && (
+                          <div className="text-[11px] text-muted/60 mb-2 font-mono bg-foreground/3 px-3 py-2 rounded-lg
+                            max-h-16 overflow-hidden relative">
+                            {h.prompt.slice(0, 200)}
+                            {h.prompt.length > 200 && "..."}
+                          </div>
+                        )}
+                        <pre className="text-xs text-muted-foreground bg-background p-4 rounded-xl
+                          overflow-auto max-h-[300px] whitespace-pre-wrap break-words border border-border/50
+                          leading-relaxed">
+                          {h.text}
+                        </pre>
+                        {h.citations.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {h.citations.map((c, ci) => (
+                              <a
+                                key={ci}
+                                href={c}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-accent hover:underline bg-accent/5 px-2 py-0.5 rounded-full"
+                              >
+                                {new URL(c).hostname}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.details>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
