@@ -46,6 +46,36 @@ interface CommunityEntry {
   source_id: string;
 }
 
+// ─── Source org derivation ─────────────────────────────────
+
+/** Derive a meaningful source_org from the community title and URL */
+function deriveSourceOrg(title: string, url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    if (host.includes("discord")) return "Discord";
+    if (host.includes("reddit.com")) return "Reddit";
+    if (host.includes("t.me") || host.includes("telegram")) return "Telegram";
+    if (host.includes("meetup.com")) return "Meetup";
+    if (host.includes("facebook.com")) return "Facebook";
+    if (host.includes("linkedin.com")) return "LinkedIn";
+    if (host.includes("slack.com")) return "Slack";
+    if (host.includes("instagram.com")) return "Instagram";
+    if (host.includes("groups.google.com")) return "Google Groups";
+    if (host.includes("lesswrong.com")) return "LessWrong";
+    if (host.includes("effectivealtruism.org")) return "EA Forum";
+    if (host.includes("alignmentforum.org")) return "Alignment Forum";
+    if (host.includes("substack.com")) return "Substack";
+  } catch { /* fall through */ }
+
+  // Use cleaned community title for orgs with their own websites
+  const clean = title
+    .replace(/\s*\([^)]+\)\s*$/, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&#x27;/g, "'")
+    .trim();
+  return clean || "Other";
+}
+
 // ─── URL normalization ─────────────────────────────────────
 
 function normalizeUrl(url: string): string {
@@ -242,11 +272,12 @@ async function fetchAISafetyGroups(): Promise<CommunityEntry[]> {
     // Skip non-community links (navigation etc.)
     if (url.startsWith("/") || url.includes("aisafety.com")) continue;
 
+    const fullUrl = url.startsWith("http") ? url : `https://${url}`;
     entries.push({
       title: rawName,
       description: `AI safety community listed on AISafety.com.`,
-      url: url.startsWith("http") ? url : `https://${url}`,
-      source_org: "Other",
+      url: fullUrl,
+      source_org: deriveSourceOrg(rawName, fullUrl),
       location: "Global", // hard to parse location from the HTML
       source: "aisafety",
       source_id: `aisafety-${rawName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,

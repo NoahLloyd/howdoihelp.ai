@@ -103,7 +103,7 @@ export function CategoryListing({ category, resources }: CategoryListingProps) {
                       {resource.description}
                     </p>
                   )}
-                  <div className="flex items-center gap-1.5 mt-2 text-[11px] text-muted font-mono">
+                  <div className="flex items-center gap-1.5 mt-2 text-[11px] text-muted-foreground font-mono">
                     {resource.source_org && <span>{resource.source_org}</span>}
                     {resource.location && resource.location !== "Global" && (
                       <>

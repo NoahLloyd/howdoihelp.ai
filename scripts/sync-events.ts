@@ -2,6 +2,7 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 import { createClient } from '@supabase/supabase-js';
 import * as https from 'https';
+import { estimateEventMinutes } from './lib/estimate-time';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -157,18 +158,39 @@ async function syncEvents() {
         // Major hubs get slightly higher starting scores
         let score = 0.5;
         let friction = 0.1; // Usually low friction to attend an event
-        
+        let eventType = 'other';
+
         const lowerTitle = remote.title.toLowerCase();
         if (lowerTitle.includes('eag') || lowerTitle.includes('conference') || lowerTitle.includes('summit')) {
             score = 0.8;
             friction = 0.5; // Conferences have higher friction
-        } else if (lowerTitle.includes('hackathon') || lowerTitle.includes('workshop')) {
+            eventType = 'conference';
+        } else if (lowerTitle.includes('hackathon')) {
             score = 0.7;
             friction = 0.3;
+            eventType = 'hackathon';
+        } else if (lowerTitle.includes('workshop')) {
+            score = 0.7;
+            friction = 0.3;
+            eventType = 'workshop';
         } else if (lowerTitle.includes('meetup') || lowerTitle.includes('coffee') || lowerTitle.includes('social')) {
             score = 0.4; // Regular meetups
             friction = 0.05;
+            eventType = 'meetup';
+        } else if (lowerTitle.includes('talk') || lowerTitle.includes('lecture') || lowerTitle.includes('panel') || lowerTitle.includes('seminar') || lowerTitle.includes('presentation')) {
+            eventType = 'talk';
+        } else if (lowerTitle.includes('course') || lowerTitle.includes('reading group') || lowerTitle.includes('study group')) {
+            eventType = 'course';
+        } else if (lowerTitle.includes('fellowship') || lowerTitle.includes('internship')) {
+            eventType = 'fellowship';
         }
+
+        const startDate = remote.startTime?.substring(0, 10);
+        const endDate = remote.endTime?.substring(0, 10);
+
+        // Route fellowship/course/program types to programs category
+        const PROGRAM_EVENT_TYPES = ['fellowship', 'course', 'program'];
+        const category = PROGRAM_EVENT_TYPES.includes(eventType) ? 'programs' : 'events';
 
         const newResource = {
             id: generatedId,
@@ -176,11 +198,12 @@ async function syncEvents() {
             description: desc,
             url: finalUrl,
             source_org: remote.source_name,
-            category: 'events',
+            category,
             location: finalLocation,
-            min_minutes: 60, // Standard 1 hour event baseline
+            min_minutes: estimateEventMinutes(eventType, startDate, endDate),
             ev_general: score,
             friction: friction,
+            event_type: eventType,
             enabled: true,
             status: 'approved',
             event_date: remote.startTime.substring(0, 10), // Extract YYYY-MM-DD

@@ -644,7 +644,7 @@ function ConnectExplorer({ resources, variant, geo, onClickTrack, onLocationChan
 type LearnTab = "quick" | "courses";
 
 const LEARN_TABS: { id: LearnTab; label: string }[] = [
-  { id: "quick", label: "Quick reads & tools" },
+  { id: "quick", label: "Reads & tools" },
   { id: "courses", label: "Courses & programs" },
 ];
 
@@ -658,11 +658,11 @@ function LearnExplorer({ resources, variant, onClickTrack }: LearnExplorerProps)
   const [search, setSearch] = useState("");
 
   const quickReads = useMemo(
-    () => resources.filter((r) => r.min_minutes < 60),
+    () => resources.filter((r) => r.min_minutes < 1500),
     [resources]
   );
   const courses = useMemo(
-    () => resources.filter((r) => r.min_minutes >= 60),
+    () => resources.filter((r) => r.min_minutes >= 1500),
     [resources]
   );
 

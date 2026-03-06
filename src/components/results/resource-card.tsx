@@ -2,6 +2,8 @@
 
 import { ScoredResource, Variant } from "@/types";
 import { trackUrl, formatTime } from "@/lib/utils";
+import { OrgLogo } from "@/components/results/org-logo";
+import { getOrgDisplayName } from "@/lib/org-logos";
 
 interface ResourceCardProps {
   scored: ScoredResource;
@@ -22,6 +24,32 @@ export function ResourceCard({
 }: ResourceCardProps) {
   const { resource } = scored;
   const url = trackUrl(resource.url, variant, resource.id);
+  const displayName = getOrgDisplayName(resource.source_org, resource.url);
+
+  // Build metadata pieces for the bottom line (date + location only)
+  const metaPieces: string[] = [];
+  if (resource.deadline_date) {
+    metaPieces.push(
+      `Deadline: ${new Date(resource.deadline_date).toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      })}`
+    );
+  } else if (resource.event_date) {
+    metaPieces.push(
+      new Date(resource.event_date).toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      })
+    );
+  }
+  if (resource.location && resource.location !== "Global" && resource.location !== "Online") {
+    metaPieces.push(resource.location);
+  }
 
   return (
     <a
@@ -35,9 +63,24 @@ export function ResourceCard({
           : "border-border bg-card p-4 hover:border-accent/30 hover:bg-card-hover"
       }`}
     >
+      {/* Org header: logo + name, time pill right-aligned */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <OrgLogo
+          sourceOrg={resource.source_org}
+          resourceUrl={resource.url}
+          size={isPrimary ? 22 : 18}
+        />
+        <span className="font-medium">{displayName}</span>
+        {resource.category !== "communities" && (
+          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+            {formatTime(resource.min_minutes)}
+          </span>
+        )}
+      </div>
+
       {/* Title */}
       <h3
-        className={`font-semibold tracking-tight ${
+        className={`mt-2 font-semibold tracking-tight ${
           isPrimary ? "text-xl" : "text-base"
         }`}
       >
@@ -53,40 +96,17 @@ export function ResourceCard({
         {customDescription || resource.description}
       </p>
 
-      {/* Date + location: show deadline if present (replaces event date), otherwise event date */}
-      {(resource.deadline_date || resource.event_date || (resource.location && resource.location !== "Global" && resource.location !== "Online")) && (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {resource.deadline_date ? (
-            <span className="font-medium">
-              Deadline:{" "}
-              {new Date(resource.deadline_date).toLocaleDateString("en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                timeZone: "UTC",
-              })}
+      {/* Date + location footer (only when there's something to show) */}
+      {metaPieces.length > 0 && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+          {metaPieces.map((piece, i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              {i > 0 && <span className="text-border">·</span>}
+              {piece}
             </span>
-          ) : resource.event_date ? (
-            <span className="font-medium">
-              {new Date(resource.event_date).toLocaleDateString("en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                timeZone: "UTC",
-              })}
-            </span>
-          ) : null}
-          {resource.location && resource.location !== "Global" && resource.location !== "Online" && (
-            <span>{resource.location}</span>
-          )}
+          ))}
         </div>
       )}
-
-      {/* Footer: source + time */}
-      <div className="mt-3 flex items-center justify-between text-xs text-muted">
-        <span>via {resource.source_org}</span>
-        <span>{formatTime(resource.min_minutes)}</span>
-      </div>
     </a>
   );
 }

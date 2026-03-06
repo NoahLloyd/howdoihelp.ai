@@ -521,9 +521,9 @@ export function CommunitiesExplorer({ resources }: CommunitiesExplorerProps) {
                         </p>
                       )}
 
-                      <div className="flex flex-wrap items-center gap-1 mt-2 text-[10px] text-muted font-mono">
+                      <div className="flex flex-wrap items-center gap-1 mt-2 text-[10px] text-muted-foreground font-mono">
                         {r.location && r.location !== "Global" && (
-                          <span className="bg-background px-1.5 py-0.5 rounded">
+                          <span className="border border-border px-1.5 py-0.5 rounded">
                             {r.location.length > 28 ? r.location.slice(0, 26) + "…" : r.location}
                           </span>
                         )}
@@ -532,7 +532,7 @@ export function CommunitiesExplorer({ resources }: CommunitiesExplorerProps) {
                           (sourceFilter === "all" ||
                             (sourceFilter === "PauseAI" && !r.source_org.startsWith("PauseAI")) ||
                             (sourceFilter !== "all" && sourceFilter !== "PauseAI" && sourceFilter !== r.source_org)) && (
-                            <span className="bg-background px-1.5 py-0.5 rounded">
+                            <span className="border border-border px-1.5 py-0.5 rounded">
                               {r.source_org.startsWith("PauseAI") ? "PauseAI" : r.source_org}
                             </span>
                           )}

@@ -25,6 +25,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { scrapeUrl } from './lib/scrape-url';
 import { getSupabase, insertCandidates } from './lib/insert-candidates';
 import { preFilter } from './lib/pre-filter';
+import { estimateEventMinutes } from './lib/estimate-time';
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -430,15 +431,23 @@ async function promoteToResources(
 ): Promise<string | null> {
   const resourceId = `eval-${candidate.source}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
+  // Route fellowship/course/program types to the programs category
+  const PROGRAM_EVENT_TYPES = ['fellowship', 'course', 'program'];
+  const category = PROGRAM_EVENT_TYPES.includes(evaluation.event_type) ? 'programs' : 'events';
+
   const { error } = await supabase.from('resources').insert({
     id: resourceId,
     title: evaluation.clean_title,
     description: evaluation.clean_description,
     url: candidate.url,
     source_org: evaluation.organization || candidate.source_org || candidate.source,
-    category: 'events',
+    category,
     location: evaluation.location || candidate.location || 'Global',
-    min_minutes: 60,
+    min_minutes: estimateEventMinutes(
+      evaluation.event_type,
+      evaluation.event_date || candidate.event_date,
+      evaluation.event_end_date,
+    ),
     ev_general: evaluation.suggested_ev,
     friction: evaluation.suggested_friction,
     enabled: true,
