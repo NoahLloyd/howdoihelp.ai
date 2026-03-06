@@ -59,10 +59,12 @@ Use your best judgment to determine what is actually true about this person. Tru
 If guides are available, you may recommend ONE guide alongside the resources. Only recommend a guide when there is a genuinely strong match based on:
 - The guide's topics align with what this person needs
 - The guide's preferred career stages / backgrounds match this person
+- The guide's preferred AI safety experience level matches this person (if specified)
 - The guide's "best for" description fits this person
 - The guide did NOT say this person would be "not a good fit"
+- If the guide has a geographic preference, the user's location should match
 
-If no guide is a strong match, do NOT include one. A bad match wastes both people's time.
+If no guide is a strong match, do NOT include one. A bad match wastes both people's time. Guides have carefully set their preferences about who they want to talk to, so respect those preferences strictly. A guide who said they want to talk to students should not be matched with a senior professional, and vice versa.
 
 When you do recommend a guide, include it as a separate object in the JSON with "guideId" instead of "resourceId". Give it a rank position where it naturally fits among the resources (often rank 2-4). Write a personalized description explaining why this specific guide would be valuable for this specific person.
 

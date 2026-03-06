@@ -59,6 +59,8 @@ export async function updateProfile(
 
 // ─── Guide Settings ──────────────────────────────────────────
 
+export type AvailabilityMode = "one_call" | "1_per_month" | "2_per_month" | "1_per_week" | "2_per_week" | "unlimited";
+
 export interface GuideData {
   id: string;
   status: "draft" | "active" | "paused";
@@ -81,6 +83,7 @@ export interface GuideData {
   not_a_good_fit: string | null;
   geographic_preference: string;
   booking_mode: "direct" | "approval_required";
+  availability_mode: AvailabilityMode;
 }
 
 // ─── Avatar Upload ──────────────────────────────────────────
