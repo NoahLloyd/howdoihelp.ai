@@ -223,3 +223,47 @@ export async function sendCalendarLinkToRequester({
     html: emailLayout(content),
   });
 }
+
+// ─── Guide Follow-Up (One-Call Mode) ────────────────────────
+
+interface GuideFollowUpEmail {
+  guideEmail: string;
+  guideName: string;
+}
+
+export async function sendGuideFollowUpEmail({
+  guideEmail,
+  guideName,
+}: GuideFollowUpEmail): Promise<void> {
+  const base = getBaseUrl();
+  const settingsUrl = `${base}/dashboard/guide`;
+
+  const content = `
+    <p style="font-size: 15px; color: ${BRAND.foreground}; margin: 0 0 20px 0;">
+      Hi ${guideName.split(" ")[0]},
+    </p>
+
+    <p style="font-size: 15px; color: ${BRAND.mutedFg}; line-height: 1.6; margin: 0 0 16px 0;">
+      Thanks for taking a call through howdoihelp.ai! Since you chose "just one call for now," you're currently not being recommended to anyone.
+    </p>
+
+    <p style="font-size: 15px; color: ${BRAND.mutedFg}; line-height: 1.6; margin: 0 0 24px 0;">
+      If you'd like to keep helping people, you can update your availability to take more calls.
+    </p>
+
+    <div style="text-align: center; margin: 28px 0 32px;">
+      ${primaryButton(settingsUrl, "Update your availability")}
+    </div>
+
+    <p style="font-size: 13px; color: ${BRAND.muted}; line-height: 1.5; margin: 0;">
+      No pressure at all. If one call was enough, you don't need to do anything.
+    </p>
+  `;
+
+  await resend.emails.send({
+    from: FROM_EMAIL,
+    to: guideEmail,
+    subject: "Want to take more calls on howdoihelp.ai?",
+    html: emailLayout(content),
+  });
+}
