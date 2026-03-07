@@ -26,6 +26,48 @@ import { ResourceCard } from "@/components/results/resource-card";
 import { GuideCard } from "@/components/results/guide-card";
 import { LocationPicker } from "@/components/results/location-picker";
 
+// ─── Local Storage Persistence ───────────────────────────────
+
+const REC_SESSION_KEY = "hdih_rec_session";
+
+export function saveRecommendationSession(
+  items: ResultItem[],
+  answers: UserAnswers,
+  variant: Variant,
+  geo: GeoData | null,
+) {
+  try {
+    localStorage.setItem(
+      REC_SESSION_KEY,
+      JSON.stringify({ items, answers, variant, geo, timestamp: Date.now() })
+    );
+  } catch {}
+}
+
+export function loadRecommendationSession(): {
+  items: ResultItem[];
+  answers: UserAnswers;
+  variant: Variant;
+  geo: GeoData | null;
+  timestamp: number;
+} | null {
+  try {
+    const raw = localStorage.getItem(REC_SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function hasSavedRecommendations(): boolean {
+  try {
+    return !!localStorage.getItem(REC_SESSION_KEY);
+  } catch {
+    return false;
+  }
+}
+
 /** A result item is either a normal scored resource, the local card, or a guide recommendation */
 type ResultItem =
   | { kind: "resource"; scored: ScoredResource; customDescription?: string; matchReason?: string }
@@ -39,9 +81,11 @@ interface ResultsProps {
   precomputedItems?: ResultItem[];
   /** Pre-computed geo from ProcessingFlow */
   precomputedGeo?: GeoData;
+  /** Navigate to the full browse view */
+  onBrowse?: () => void;
 }
 
-export function Results({ variant, answers, precomputedItems, precomputedGeo }: ResultsProps) {
+export function Results({ variant, answers, precomputedItems, precomputedGeo, onBrowse }: ResultsProps) {
   const [items, setItems] = useState<ResultItem[]>(precomputedItems ?? []);
   const [geo, setGeo] = useState<GeoData | null>(precomputedGeo ?? null);
   const [localGeo, setLocalGeo] = useState<GeoData | null>(precomputedGeo ?? null);
@@ -57,6 +101,8 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
     const idx = precomputedItems.findIndex((item) => item.kind === "local");
     localCardIndexRef.current = idx >= 0 ? idx : null;
     fetchResources().then(setAllResources);
+    // Save precomputed recommendations for return visits
+    saveRecommendationSession(precomputedItems, answers, variant, precomputedGeo ?? null);
   }, [precomputedItems]);
 
   useEffect(() => {
@@ -84,14 +130,22 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
 
       setItems(merged);
 
-      // Persist user data
+      // Persist user data + recommendations
       const userId = getUserId();
       if (userId) {
+        const recSummary: RecommendedResource[] = merged
+          .filter((item): item is ResultItem & { kind: "resource" } => item.kind === "resource")
+          .map((item, i) => ({
+            resourceId: item.scored.resource.id,
+            rank: i + 1,
+            description: item.customDescription || item.scored.resource.description,
+          }));
         upsertUser(userId, {
           ...(answers.enrichedProfile ? { profile_data: answers.enrichedProfile } : {}),
           ...(answers.profilePlatform ? { profile_platform: answers.profilePlatform } : {}),
           ...(answers.profileUrl ? { profile_url: answers.profileUrl } : {}),
           answers,
+          last_recommendations: recSummary,
         }).catch(() => {});
       }
 
@@ -105,6 +159,9 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
         resultSource,
         Date.now() - startTimeRef.current
       );
+
+      // Save recommendation session to localStorage for return visits
+      saveRecommendationSession(merged, answers, variant, geoData);
 
       setLoading(false);
     }
@@ -257,6 +314,13 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
 
   const handleResourceClick = useCallback(
     (resourceId: string, position: number) => {
+      // Save click to localStorage
+      try {
+        const clicks = JSON.parse(localStorage.getItem("hdih_rec_clicks") || "[]");
+        clicks.push({ resourceId, position, timestamp: Date.now() });
+        localStorage.setItem("hdih_rec_clicks", JSON.stringify(clicks));
+      } catch {}
+
       if (geo) {
         trackClick(resourceId, variant, answers, geo.countryCode);
 
@@ -351,6 +415,24 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
                 );
               })}
             </div>
+          </motion.div>
+        )}
+
+        {/* Browse all link */}
+        {onBrowse && (
+          <motion.div
+            className="mt-8 text-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 + items.length * 0.1 }}
+          >
+            <button
+              onClick={onBrowse}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/30 hover:bg-card-hover hover:text-foreground"
+            >
+              See the full overview
+              <span aria-hidden="true">&rarr;</span>
+            </button>
           </motion.div>
         )}
 
