@@ -26,6 +26,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "resend": "^6.9.3",
+    "tsx": "^4.21.0",
     "tw-shimmer": "^0.4.7"
   },
   "devDependencies": {
@@ -38,7 +39,6 @@
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
-    "tsx": "^4.21.0",
     "typescript": "5.9.3"
   }
 }

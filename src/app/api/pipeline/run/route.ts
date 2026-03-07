@@ -104,7 +104,11 @@ export async function GET(req: Request) {
       const child = spawn("npx", args, {
         cwd: process.cwd(),
         shell: true,
-        env: { ...process.env },
+        env: {
+          ...process.env,
+          HOME: process.env.HOME || "/tmp",
+          npm_config_cache: "/tmp/.npm",
+        },
       });
 
       child.stdout?.on("data", (chunk: Buffer) => {
