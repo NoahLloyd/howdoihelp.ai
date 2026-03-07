@@ -85,18 +85,12 @@ export function AboutContent() {
 
           <p className="mt-3 text-base leading-relaxed text-muted-foreground">
             Guides are people already working in AI safety who volunteer
-            30-minute video calls to help others navigate the field. They can
-            help you figure out where your skills are most needed, which
-            programs are worth applying to, and what the day-to-day work
-            actually looks like.
+            30-minute video calls to help others navigate the field. When you
+            use our tool, we match you with a guide who fits your background
+            and goals, so both sides get the most out of the conversation.
           </p>
 
           <div className="mt-6 flex flex-col gap-2">
-            <PageLink
-              href="/guides"
-              title="Browse guides"
-              description="Find someone with relevant experience and book a free call"
-            />
             <PageLink
               href="/auth/login"
               title="Become a guide"

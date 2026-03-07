@@ -197,6 +197,7 @@ export interface RecommendedResource {
   rank: number;
   description: string;
   title?: string;
+  matchReason?: string;
 }
 
 // ─── Guide Recommendations ──────────────────────────────────

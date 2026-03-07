@@ -28,7 +28,7 @@ import { LocationPicker } from "@/components/results/location-picker";
 
 /** A result item is either a normal scored resource, the local card, or a guide recommendation */
 type ResultItem =
-  | { kind: "resource"; scored: ScoredResource; customDescription?: string }
+  | { kind: "resource"; scored: ScoredResource; customDescription?: string; matchReason?: string }
   | { kind: "local"; card: LocalCard | null }
   | { kind: "guide"; recommendation: GuideRecommendation };
 
@@ -159,6 +159,7 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
           kind: "resource",
           scored: { resource, score: 1 / rec.rank, matchReasons: [] },
           customDescription: rec.description,
+          matchReason: rec.matchReason,
         });
       }
 
@@ -302,9 +303,6 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
     );
   }
 
-  const primary = items[0];
-  const secondary = items.slice(1);
-
   return (
     <main className="min-h-dvh px-6 py-12">
       <div className="mx-auto w-full max-w-lg">
@@ -319,41 +317,16 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
           </h1>
         </motion.div>
 
-        {/* Primary Recommendation */}
-        {primary && (
+        {/* All Recommendations — ranked equally */}
+        {items.length > 0 && (
           <motion.div
             className="mt-8"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.5 }}
-          >
-            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-accent">
-              Your #1 action
-            </p>
-            <ResultItemRenderer
-              item={primary}
-              variant={variant}
-              geo={localGeo}
-              isPrimary
-              onClickTrack={(id) => handleResourceClick(id, 0)}
-              onLocationChange={handleLocationChange}
-            />
-          </motion.div>
-        )}
-
-        {/* Secondary Recommendations */}
-        {secondary.length > 0 && (
-          <motion.div
-            className="mt-10"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.5, duration: 0.5 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
           >
-            <p className="mb-3 text-sm text-muted-foreground">
-              Also check out
-            </p>
             <div className="flex flex-col gap-3">
-              {secondary.map((item, i) => {
+              {items.map((item, i) => {
                 const key =
                   item.kind === "resource"
                     ? item.scored.resource.id
@@ -365,13 +338,13 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo }: 
                     key={key}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.6 + i * 0.1 }}
+                    transition={{ delay: 0.3 + i * 0.1 }}
                   >
                     <ResultItemRenderer
                       item={item}
                       variant={variant}
                       geo={localGeo}
-                      onClickTrack={(id) => handleResourceClick(id, i + 1)}
+                      onClickTrack={(id) => handleResourceClick(id, i)}
                       onLocationChange={handleLocationChange}
                     />
                   </motion.div>
@@ -433,6 +406,7 @@ function ResultItemRenderer({
       variant={variant}
       isPrimary={isPrimary}
       customDescription={item.customDescription}
+      matchReason={item.matchReason}
       onClickTrack={(id) => onClickTrack(id)}
     />
   );

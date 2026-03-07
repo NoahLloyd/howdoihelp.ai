@@ -12,6 +12,7 @@ import {
   updateProfile,
   uploadAvatar,
 } from "../actions";
+import type { AvailabilityMode } from "../actions";
 import { LanguageSelect } from "@/components/ui/language-select";
 
 // ─── Constants ──────────────────────────────────────────────
@@ -94,9 +95,18 @@ const GEO_OPTIONS = [
   { value: "same_city", label: "Only same city", desc: "Option for in-person meetups" },
 ];
 
+const AVAILABILITY_OPTIONS: { value: AvailabilityMode; label: string; desc: string }[] = [
+  { value: "one_call", label: "Just one call for now", desc: "You'll be hidden after one booking until you're ready for more" },
+  { value: "1_per_month", label: "1 call per month", desc: "One conversation each month" },
+  { value: "2_per_month", label: "2 calls per month", desc: "A couple conversations each month" },
+  { value: "1_per_week", label: "1 call per week", desc: "One conversation each week" },
+  { value: "2_per_week", label: "2+ calls per week", desc: "Multiple conversations each week" },
+  { value: "unlimited", label: "As many as want to book me", desc: "No limit on how often you're recommended" },
+];
+
 type GuideStatus = "draft" | "active" | "paused";
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
 // ─── Animations ─────────────────────────────────────────────
 
@@ -157,6 +167,7 @@ export default function GuideSettingsPage() {
 
   // Form state - booking
   const [bookingMode, setBookingMode] = useState<"direct" | "approval_required">("direct");
+  const [availabilityMode, setAvailabilityMode] = useState<AvailabilityMode>("unlimited");
 
   // Form state - review
   const [linkedinUrl, setLinkedinUrl] = useState("");
@@ -191,6 +202,7 @@ export default function GuideSettingsPage() {
           setNotAGoodFit(guide.not_a_good_fit || "");
           setGeographicPreference(guide.geographic_preference || "anywhere");
           setBookingMode(guide.booking_mode || "direct");
+          setAvailabilityMode(guide.availability_mode || "unlimited");
         }
         if (profile) {
           setBio(profile.bio || "");
@@ -290,6 +302,7 @@ export default function GuideSettingsPage() {
         not_a_good_fit: notAGoodFit || null,
         geographic_preference: geographicPreference,
         booking_mode: bookingMode,
+        availability_mode: availabilityMode,
       });
 
       setStatus(finalStatus);
@@ -758,8 +771,50 @@ export default function GuideSettingsPage() {
             </motion.div>
           )}
 
-          {/* ── Step 3: Availability + Review ─────────────────── */}
+          {/* ── Step 3: How many conversations ────────────────── */}
           {stepIndex === 3 && (
+            <motion.div
+              key="availability-mode"
+              custom={direction}
+              variants={stepVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+            >
+              <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                How many conversations do you want?
+              </h2>
+              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+                This controls how often you&apos;re recommended to people. You
+                can change this anytime.
+              </p>
+
+              <div className="mt-8 flex flex-col gap-2.5">
+                {AVAILABILITY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setAvailabilityMode(opt.value)}
+                    className={`w-full rounded-xl border px-4 py-4 text-left transition-all cursor-pointer hover:border-accent/50 ${
+                      availabilityMode === opt.value
+                        ? "border-accent bg-accent/10"
+                        : "border-border bg-card"
+                    }`}
+                  >
+                    <span className="block text-sm font-medium text-foreground">
+                      {opt.label}
+                    </span>
+                    <span className="block text-xs text-muted mt-0.5">
+                      {opt.desc}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── Step 4: Booking & Review ──────────────────────── */}
+          {stepIndex === 4 && (
             <motion.div
               key="availability-review"
               custom={direction}

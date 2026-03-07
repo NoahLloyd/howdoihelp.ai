@@ -281,13 +281,6 @@ function GuideActiveCard({
               <Pencil className="h-3 w-3" />
               Edit
             </Link>
-            <Link
-              href="/guides"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:border-accent/50 hover:bg-card-hover transition-all"
-            >
-              <ExternalLink className="h-3 w-3" />
-              View listing
-            </Link>
             {(isActive || isPaused) && (
               <button
                 onClick={onToggle}

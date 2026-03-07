@@ -59,10 +59,12 @@ Use your best judgment to determine what is actually true about this person. Tru
 If guides are available, you may recommend ONE guide alongside the resources. Only recommend a guide when there is a genuinely strong match based on:
 - The guide's topics align with what this person needs
 - The guide's preferred career stages / backgrounds match this person
+- The guide's preferred AI safety experience level matches this person (if specified)
 - The guide's "best for" description fits this person
 - The guide did NOT say this person would be "not a good fit"
+- If the guide has a geographic preference, the user's location should match
 
-If no guide is a strong match, do NOT include one. A bad match wastes both people's time.
+If no guide is a strong match, do NOT include one. A bad match wastes both people's time. Guides have carefully set their preferences about who they want to talk to, so respect those preferences strictly. A guide who said they want to talk to students should not be matched with a senior professional, and vice versa.
 
 When you do recommend a guide, include it as a separate object in the JSON with "guideId" instead of "resourceId". Give it a rank position where it naturally fits among the resources (often rank 2-4). Write a personalized description explaining why this specific guide would be valuable for this specific person.
 
@@ -83,6 +85,7 @@ For resources:
   "resourceId": "the-resource-id",
   "rank": 1,
   "description": "A personalized 1-2 sentence description.",
+  "matchReason": "Leverages your ML skills",
   "title": "Optional custom title"
 }
 
@@ -97,6 +100,15 @@ For a guide (optional, at most 1):
 Write a personalized description (1 sentence, sometimes 2) that is heavily inspired by the resource's existing description but rewritten to speak directly to this person. Weave in specific details from their profile - their job, skills, company, background - to make it feel personal. For example, instead of "A research program for aspiring alignment researchers", write "A 10-week research sprint where your ML engineering experience at DeepMind would be a huge asset." The description should make the person feel like this resource was hand-picked for them.
 
 For guides, write something like "Sarah transitioned from software engineering to alignment research two years ago and mentors people making the same switch. Your ML background at Google makes you exactly who she's looking to help."
+
+### matchReason (required for resources)
+A punchy 3-6 word phrase explaining WHY this resource matches this person. This is displayed as a highlighted tag above the description. It should feel like a quick "aha" moment. Examples:
+- "Leverages your ML skills"
+- "Perfect for policy professionals"
+- "Near you in San Francisco"
+- "Matches your research background"
+- "Great for your experience level"
+Never start with "Because" or "Since". Be direct. Reference their specific skills, role, location, or background when possible.
 
 ### title (optional, resources only)
 Only include a "title" field if you think a custom title would be more compelling for this specific user than the existing one. Otherwise, omit "title" entirely and the existing title will be used.

@@ -12,7 +12,6 @@ import type {
   ScoredResource,
   ResourceCategory,
 } from "@/types";
-import type { PublicGuide } from "@/app/api/guides/route";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +36,8 @@ interface GuideWithProfile {
   linkedin_url: string | null;
   website_url: string | null;
   is_available_in_person: boolean;
+  geographic_preference: string;
+  availability_mode: string;
 }
 
 async function fetchActiveGuides(): Promise<GuideWithProfile[]> {
@@ -83,8 +84,107 @@ async function fetchActiveGuides(): Promise<GuideWithProfile[]> {
       linkedin_url: g.linkedin_url as string | null,
       website_url: g.website_url as string | null,
       is_available_in_person: (g.is_available_in_person as boolean) || false,
+      geographic_preference: (g.geographic_preference as string) || "anywhere",
+      availability_mode: (g.availability_mode as string) || "unlimited",
     };
   });
+}
+
+// ─── Guide Filtering ─────────────────────────────────────────
+
+function locationContains(guideLocation: string | null, term: string | undefined): boolean {
+  if (!guideLocation || !term) return false;
+  return guideLocation.toLowerCase().includes(term.toLowerCase());
+}
+
+/** Capacity limit for each availability mode (per period) */
+function getCapacityLimit(mode: string): { limit: number; periodDays: number } | null {
+  switch (mode) {
+    case "one_call": return { limit: 1, periodDays: 9999 }; // effectively forever
+    case "1_per_month": return { limit: 1, periodDays: 30 };
+    case "2_per_month": return { limit: 2, periodDays: 30 };
+    case "1_per_week": return { limit: 1, periodDays: 7 };
+    case "2_per_week": return { limit: 2, periodDays: 7 };
+    default: return null; // unlimited
+  }
+}
+
+async function filterGuides(
+  guides: GuideWithProfile[],
+  geo: GeoData,
+): Promise<GuideWithProfile[]> {
+  // Geographic filtering
+  let filtered = guides.filter((g) => {
+    switch (g.geographic_preference) {
+      case "same_city":
+        return locationContains(g.location, geo.city);
+      case "same_country":
+        return locationContains(g.location, geo.country) ||
+          locationContains(g.location, geo.countryCode);
+      case "same_timezone":
+        // Best-effort: match country since we don't have reliable timezone mapping
+        return locationContains(g.location, geo.country) ||
+          locationContains(g.location, geo.countryCode);
+      default: // "anywhere"
+        return true;
+    }
+  });
+
+  // Availability/capacity filtering
+  const guidesNeedingCapacityCheck = filtered.filter((g) => g.availability_mode !== "unlimited");
+  if (guidesNeedingCapacityCheck.length > 0) {
+    const supabase = getSupabase();
+    if (supabase) {
+      const guideIds = guidesNeedingCapacityCheck.map((g) => g.id);
+
+      // Fetch pending and approved requests for these guides
+      const { data: requests } = await supabase
+        .from("guide_requests")
+        .select("guide_id, status, created_at")
+        .in("guide_id", guideIds)
+        .in("status", ["pending", "approved"]);
+
+      if (requests && requests.length > 0) {
+        const now = Date.now();
+        const excludeIds = new Set<string>();
+
+        for (const guide of guidesNeedingCapacityCheck) {
+          const cap = getCapacityLimit(guide.availability_mode);
+          if (!cap) continue;
+
+          const guideRequests = requests.filter(
+            (r: { guide_id: string; status: string; created_at: string }) => r.guide_id === guide.id
+          );
+
+          if (guide.availability_mode === "one_call") {
+            // For one_call: any pending or approved request means they're at capacity
+            if (guideRequests.length > 0) {
+              excludeIds.add(guide.id);
+            }
+          } else {
+            // For recurring: count approved requests within the period
+            const periodStart = now - cap.periodDays * 24 * 60 * 60 * 1000;
+            const recentApproved = guideRequests.filter(
+              (r: { status: string; created_at: string }) =>
+                r.status === "approved" &&
+                new Date(r.created_at).getTime() >= periodStart
+            );
+            // Also count pending as "reserved" slots
+            const pending = guideRequests.filter(
+              (r: { status: string }) => r.status === "pending"
+            );
+            if (recentApproved.length + pending.length >= cap.limit) {
+              excludeIds.add(guide.id);
+            }
+          }
+        }
+
+        filtered = filtered.filter((g) => !excludeIds.has(g.id));
+      }
+    }
+  }
+
+  return filtered;
 }
 
 // ─── Request Handler ─────────────────────────────────────────
@@ -107,10 +207,13 @@ export async function POST(req: Request) {
     }
 
     // Fetch guides and active prompt in parallel
-    const [guides, activePrompt] = await Promise.all([
+    const [allGuides, activePrompt] = await Promise.all([
       fetchActiveGuides(),
       getActivePrompt("recommend"),
     ]);
+
+    // Pre-filter guides based on geographic preference, availability, etc.
+    const guides = await filterGuides(allGuides, geo);
 
     // ─── Pre-filter resources to reduce token cost ──────────
     const filteredResources = preFilterResources(resources, answers, geo);
@@ -184,6 +287,7 @@ export async function POST(req: Request) {
             "",
         };
         if (item.title) rec.title = item.title as string;
+        if (item.matchReason) rec.matchReason = item.matchReason as string;
         recommendations.push(rec);
       }
     } catch {
@@ -476,7 +580,9 @@ function buildGuidesVar(guides: GuideWithProfile[]): string {
     if (g.not_a_good_fit) parts.push(`  NOT a good fit for: ${g.not_a_good_fit}`);
     if (g.preferred_career_stages.length > 0) parts.push(`  Preferred career stages: ${g.preferred_career_stages.join(", ")}`);
     if (g.preferred_backgrounds.length > 0) parts.push(`  Preferred backgrounds: ${g.preferred_backgrounds.join(", ")}`);
+    if (g.preferred_experience_level.length > 0) parts.push(`  Preferred AI safety experience: ${g.preferred_experience_level.join(", ")}`);
     if (g.location) parts.push(`  Location: ${g.location}`);
+    if (g.geographic_preference !== "anywhere") parts.push(`  Geographic preference: ${g.geographic_preference}`);
     if (g.languages.length > 1) parts.push(`  Languages: ${g.languages.join(", ")}`);
     return parts.join("\n");
   });
