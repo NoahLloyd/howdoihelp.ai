@@ -12,10 +12,11 @@ import {
   identifyVariant,
 } from "@/lib/tracking";
 import { Questions } from "@/components/funnel/questions";
-import { Results, hasSavedRecommendations, loadRecommendationSession } from "@/components/funnel/results";
+import { Results, loadRecommendationSession } from "@/components/funnel/results";
 import { BrowseResults } from "@/components/funnel/browse-results";
 import { ProfileStep } from "@/components/funnel/profile-step";
 import { ProcessingFlow } from "@/components/funnel/processing-flow";
+import { getUserId, getUser } from "@/lib/user";
 import type { ResultItem } from "@/components/funnel/processing-flow";
 import type {
   Variant,
@@ -44,9 +45,6 @@ export default function Home() {
   const [precomputedItems, setPrecomputedItems] = useState<ResultItem[] | null>(null);
   const [precomputedGeo, setPrecomputedGeo] = useState<GeoData | null>(null);
 
-  // Saved recommendations state
-  const [savedRecs, setSavedRecs] = useState(false);
-
   // Push a virtual history entry when advancing steps
   function goTo(nextStep: Step) {
     history.pushState({ step: nextStep }, "");
@@ -69,7 +67,6 @@ export default function Home() {
     setVariantState(v);
     identifyVariant(v);
     trackFunnelStarted(v);
-    setSavedRecs(hasSavedRecommendations());
   }, []);
 
   function handleVariantChange(v: Variant) {
@@ -93,13 +90,24 @@ export default function Home() {
 
   // ─── Restore saved recommendations ────────────────────────
 
-  function handleViewSavedRecs() {
+  async function handleViewSavedRecs() {
+    // Try localStorage first (has full session data)
     const saved = loadRecommendationSession();
-    if (!saved) return;
-    setPrecomputedItems(saved.items);
-    setPrecomputedGeo(saved.geo);
-    setAnswers(saved.answers);
-    goTo("results");
+    if (saved) {
+      setPrecomputedItems(saved.items);
+      setPrecomputedGeo(saved.geo);
+      setAnswers(saved.answers);
+      goTo("results");
+      return;
+    }
+    // Fall back to Supabase user record (has answers, will re-compute results)
+    const userId = getUserId();
+    if (!userId) return;
+    const user = await getUser(userId);
+    if (user?.answers) {
+      setAnswers(user.answers);
+      goTo("results");
+    }
   }
 
   // ─── Variant A: Profile submission ────────────────────────
@@ -213,7 +221,7 @@ export default function Home() {
   if (step === "browse") {
     return (
       <>
-        <BrowseResults variant={variant} />
+        <BrowseResults variant={variant} onViewRecs={handleViewSavedRecs} />
         <VariantSelector
           variant={variant}
           onVariantChange={handleVariantChange}
@@ -246,7 +254,7 @@ export default function Home() {
   if (variant === "B") {
     return (
       <>
-        <BrowseResults variant={variant} />
+        <BrowseResults variant={variant} onViewRecs={handleViewSavedRecs} />
         <VariantSelector
           variant={variant}
           onVariantChange={handleVariantChange}
@@ -263,7 +271,6 @@ export default function Home() {
           onSubmit={handleProfileSubmit}
           onSkip={handleProfileSkip}
         />
-        {savedRecs && <SavedRecsLink onClick={handleViewSavedRecs} />}
         <VariantSelector
           variant={variant}
           onVariantChange={handleVariantChange}
@@ -325,45 +332,12 @@ export default function Home() {
             </div>
           </motion.div>
         </motion.div>
-        {savedRecs && (
-          <motion.div
-            className="mt-8"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1, duration: 0.4 }}
-          >
-            <button
-              onClick={handleViewSavedRecs}
-              className="text-sm text-muted-foreground/50 transition-colors hover:text-muted-foreground"
-            >
-              View your previous recommendations
-            </button>
-          </motion.div>
-        )}
       </main>
       <VariantSelector
         variant={variant}
         onVariantChange={handleVariantChange}
       />
     </>
-  );
-}
-
-// ─── Saved Recommendations Link ─────────────────────────────
-
-function SavedRecsLink({ onClick }: { onClick: () => void }) {
-  return (
-    <div className="fixed bottom-12 left-0 right-0 z-40 flex justify-center pointer-events-none">
-      <motion.button
-        onClick={onClick}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1, duration: 0.4 }}
-        className="pointer-events-auto text-sm text-muted-foreground/50 transition-colors hover:text-muted-foreground"
-      >
-        View your previous recommendations
-      </motion.button>
-    </div>
   );
 }
 

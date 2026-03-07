@@ -13,6 +13,8 @@ import {
   trackScrollDepth,
   identifyGeo,
 } from "@/lib/tracking";
+import { getUserId, getUser } from "@/lib/user";
+import { hasSavedRecommendations } from "@/components/funnel/results";
 import type {
   Resource,
   Variant,
@@ -176,18 +178,39 @@ function applySortToResources(resources: Resource[], sort: SortId): Resource[] {
 
 interface BrowseResultsProps {
   variant: Variant;
+  onViewRecs?: () => void;
 }
 
-export function BrowseResults({ variant }: BrowseResultsProps) {
+export function BrowseResults({ variant, onViewRecs }: BrowseResultsProps) {
   const [allResources, setAllResources] = useState<Resource[]>([]);
   const [geo, setGeo] = useState<GeoData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activePath, setActivePath] = useState<PathId>("quick");
+  const [hasRecs, setHasRecs] = useState(false);
 
   // Tracking refs
   const loadedAtRef = useRef<number>(0);
   const firstClickTrackedRef = useRef(false);
   const scrollMilestonesRef = useRef(new Set<number>());
+
+  // Check for saved recommendations (localStorage first, then Supabase)
+  useEffect(() => {
+    if (!onViewRecs) return;
+    // Fast local check
+    if (hasSavedRecommendations()) {
+      setHasRecs(true);
+      return;
+    }
+    // Async Supabase check
+    const userId = getUserId();
+    if (userId) {
+      getUser(userId).then((user) => {
+        if (user?.last_recommendations && user.last_recommendations.length > 0) {
+          setHasRecs(true);
+        }
+      }).catch(() => {});
+    }
+  }, [onViewRecs]);
 
   useEffect(() => {
     async function init() {
@@ -362,6 +385,23 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
             </div>
           </motion.div>
         </AnimatePresence>
+
+        {/* View saved recommendations link */}
+        {hasRecs && onViewRecs && (
+          <motion.div
+            className="mt-8 text-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+          >
+            <button
+              onClick={onViewRecs}
+              className="text-sm text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+            >
+              View your personalized recommendations
+            </button>
+          </motion.div>
+        )}
 
         <div className="pb-8" />
       </div>
