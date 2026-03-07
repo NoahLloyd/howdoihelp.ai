@@ -618,6 +618,154 @@ export async function deactivatePromptVersion(id: number): Promise<void> {
   clearPromptCache();
 }
 
+// ─── Prompt Tester Data Loading ──────────────────────────
+
+/** Load all resources + guides in one call for the recommend prompt tester */
+export interface TesterData {
+  resources: Resource[];
+  guides: GuideForTester[];
+}
+
+export interface GuideForTester {
+  id: string;
+  display_name: string | null;
+  headline: string | null;
+  bio: string | null;
+  topics: string[];
+  best_for: string | null;
+  not_a_good_fit: string | null;
+  location: string | null;
+  preferred_career_stages: string[];
+  preferred_backgrounds: string[];
+  preferred_experience_level: string[];
+  languages: string[];
+  is_available_in_person: boolean;
+}
+
+export async function fetchTesterData(): Promise<TesterData> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+
+  // Fetch resources + guides in parallel
+  const [resourcesRes, guidesRes] = await Promise.all([
+    supabase
+      .from("resources")
+      .select("*")
+      .eq("status", "approved")
+      .eq("enabled", true)
+      .order("ev_general", { ascending: false }),
+    supabase
+      .from("guides")
+      .select("*")
+      .eq("status", "active")
+      .not("calendar_link", "is", null)
+      .neq("calendar_link", ""),
+  ]);
+
+  // Filter out past-date events/programs (matches production behavior in lib/data.ts)
+  const today = new Date().toISOString().slice(0, 10);
+  const allResources = (resourcesRes.data as Resource[]) || [];
+  const resources = allResources.filter((r) => {
+    if (r.event_date && r.event_date < today) return false;
+    if (r.deadline_date && r.deadline_date < today) return false;
+    return true;
+  });
+  const rawGuides = guidesRes.data || [];
+
+  // Enrich guides with profile data
+  let guides: GuideForTester[] = [];
+  if (rawGuides.length > 0) {
+    const guideIds = rawGuides.map((g: { id: string }) => g.id);
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, display_name, avatar_url, bio")
+      .in("id", guideIds);
+
+    const profileMap = new Map(
+      (profiles || []).map((p: { id: string; display_name: string | null; avatar_url: string | null; bio: string | null }) => [p.id, p])
+    );
+
+    guides = rawGuides.map((g: Record<string, unknown>): GuideForTester => {
+      const p = profileMap.get(g.id as string) as { display_name: string | null; bio: string | null } | undefined;
+      return {
+        id: g.id as string,
+        display_name: p?.display_name ?? null,
+        headline: g.headline as string | null,
+        bio: p?.bio ?? null,
+        topics: (g.topics as string[]) || [],
+        best_for: g.best_for as string | null,
+        not_a_good_fit: g.not_a_good_fit as string | null,
+        location: g.location as string | null,
+        preferred_career_stages: (g.preferred_career_stages as string[]) || [],
+        preferred_backgrounds: (g.preferred_backgrounds as string[]) || [],
+        preferred_experience_level: (g.preferred_experience_level as string[]) || [],
+        languages: (g.languages as string[]) || [],
+        is_available_in_person: (g.is_available_in_person as boolean) || false,
+      };
+    });
+  }
+
+  return { resources, guides };
+}
+
+/** Load recent event candidates with scraped text for eval testing */
+export interface CandidateSample {
+  id: string;
+  title: string;
+  url: string;
+  scraped_text: string | null;
+  status: string;
+}
+
+export async function fetchRecentEventCandidates(): Promise<CandidateSample[]> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+  const { data, error } = await supabase
+    .from("event_candidates")
+    .select("id, title, url, scraped_text, status")
+    .not("scraped_text", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) throw new Error(error.message);
+  return (data as CandidateSample[]) || [];
+}
+
+export async function fetchRecentCommunityCandidates(): Promise<CandidateSample[]> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+  const { data, error } = await supabase
+    .from("community_candidates")
+    .select("id, title, url, scraped_text, status")
+    .not("scraped_text", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) throw new Error(error.message);
+  return (data as CandidateSample[]) || [];
+}
+
+/** Load recent user enrichment results for extract testing */
+export interface RecentEnrichment {
+  id: string;
+  profile_url: string | null;
+  display_name: string | null;
+  created_at: string;
+}
+
+export async function fetchRecentEnrichments(): Promise<RecentEnrichment[]> {
+  await verifyAdmin();
+  const supabase = getServiceClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, profile_url:source_url, display_name, created_at")
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) return []; // Table might not exist or have different schema
+  return (data as unknown as RecentEnrichment[]) || [];
+}
+
 // ─── API Usage / Cost Stats ────────────────────────────────
 
 export interface ApiUsageStats {

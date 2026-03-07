@@ -26,6 +26,7 @@ import { scrapeUrl } from './lib/scrape-url';
 import { getSupabase, insertCandidates } from './lib/insert-candidates';
 import { preFilter } from './lib/pre-filter';
 import { estimateEventMinutes } from './lib/estimate-time';
+import { getActivePrompt, interpolateTemplate } from '../src/lib/prompts';
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -64,89 +65,6 @@ interface AIEvaluation {
   reasoning: string;
 }
 
-const SYSTEM_PROMPT = `You are an event evaluator for howdoihelp.ai, a directory that helps people find AI safety events near them. Your job is to determine whether a candidate event is real, relevant, and worth listing.
-
-The site focuses on: AI safety, AI alignment, existential risk from AI, AI governance/policy, effective altruism (when AI-related), and responsible AI development.
-
-You must return ONLY a valid JSON object with these exact fields:
-{
-  "is_real_event": boolean,       // Is this an event, fellowship, program, or opportunity? (NOT a blog post, product page, org homepage, etc.)
-  "is_relevant": boolean,         // Is this related to AI safety, alignment, EA, existential risk, AI governance?
-  "relevance_score": number,      // 0.0-1.0: How relevant to AI safety specifically
-  "impact_score": number,         // 0.0-1.0: Expected impact/importance
-  "suggested_ev": number,         // 0.0-1.0: Suggested expected-value ranking score
-  "suggested_friction": number,   // 0.0-1.0: How hard is it to attend (0=one click, 1=major commitment)
-  "event_type": string,           // See event_type options below
-  "clean_title": string,          // Cleaned up, human-readable event title. Never use em dashes.
-  "clean_description": string,    // 1-2 sentence description suitable for a directory listing. Never use em dashes.
-  "event_date": string | null,    // Start date in ISO format (YYYY-MM-DD). Always extract this if possible.
-  "event_end_date": string | null, // End date in ISO format (YYYY-MM-DD) if multi-day, otherwise null
-  "event_time": string | null,    // Start time in "HH:MM" 24h format with timezone, e.g. "18:00 GMT", "14:00 PST". null if unknown.
-  "location": string,             // ALWAYS standardize to "City, Country" for in-person events, or "Online" for virtual events. Never leave as "Unknown" if you can infer it.
-  "is_online": boolean,           // true if this is a virtual/online event, false if in-person or hybrid
-  "organization": string,         // The organizing body, e.g. "MATS", "BlueDot Impact", "EA London", "PauseAI". Use the most recognizable name.
-  "duplicate_of": string | null,  // If this is a duplicate of an existing event, the ID of that event. null if not a duplicate.
-  "reasoning": string             // 2-3 sentence explanation of your evaluation
-}
-
-event_type options:
-- "conference" - multi-day conferences, summits
-- "meetup" - local community meetups, socials, coffee chats
-- "hackathon" - hackathons, alignment jams, build events
-- "workshop" - hands-on workshops, bootcamps, training sessions
-- "talk" - talks, lectures, presentations, panels
-- "social" - casual socials, dinners, happy hours
-- "course" - structured courses, reading groups, study groups
-- "fellowship" - research fellowships, residencies (e.g. MATS, PIBBSS, Interact)
-- "program" - structured programs, bootcamps, accelerators (e.g. BlueDot, AI Safety Camp)
-- "other"
-
-Scoring guidelines:
-- relevance_score 0.9-1.0: Core AI safety (EAG, MATS, alignment workshops, AI safety camps)
-- relevance_score 0.7-0.9: Strongly adjacent (EA events with AI tracks, AI governance conferences, rationalist meetups)
-- relevance_score 0.5-0.7: Related (AI ethics events, tech policy, biosecurity with AI component)
-- relevance_score 0.3-0.5: Tangential (general tech events that mention AI safety, career fairs with AI roles)
-- relevance_score 0.0-0.3: Not relevant (pure ML/product events, crypto, unrelated conferences)
-
-impact_score guidelines:
-- 0.8-1.0: Major conferences (EAG, major alignment workshops, MATS cohort)
-- 0.6-0.8: Significant events (regional conferences, hackathons, intensive workshops)
-- 0.4-0.6: Solid community events (reading groups, talks by notable researchers, local meetups in large cities)
-- 0.2-0.4: Small or routine events (regular coffee chats, casual socials)
-- 0.0-0.2: Minimal impact
-
-CRITICAL - Online event scoring:
-This directory helps people find events IN THEIR LOCAL CITY. Online events have no location advantage and are rarely specifically relevant to any individual user. Therefore:
-- Online events must be EXCEPTIONALLY noteworthy to get a high suggested_ev (e.g. a major virtual conference with top AI safety researchers, a MATS info session, an EAG virtual event)
-- Routine online meetups, webinars, and generic virtual talks should get suggested_ev <= 0.15 regardless of relevance
-- Only give an online event suggested_ev > 0.3 if it would be genuinely exciting for someone in the AI safety community regardless of where they live
-- In-person events in a specific city are inherently more valuable for this directory
-
-suggested_ev = roughly relevance_score * impact_score, but HEAVILY discount online events as described above.
-
-friction guidelines:
-- 0.0-0.1: Click a link, show up to a casual event
-- 0.1-0.3: RSVP required, small time commitment
-- 0.3-0.5: Application required, multi-day, or travel needed
-- 0.5-0.8: Selective application, significant travel, multi-week commitment
-- 0.8-1.0: Highly selective, life-changing commitment (fellowships, relocations)
-
-Date/time/location formatting:
-- ALWAYS extract and standardize the date, even if the source data is messy
-- For location, ALWAYS use the format "City, Country" (e.g. "London, UK", "San Francisco, US", "Berlin, Germany")
-- Never return "Unknown" for location if you can infer it from any available data (URL, description, org name, venue)
-- For organization, use the most commonly recognized short name (e.g. "MATS" not "Machine Alignment Technical Safety program")
-
-DUPLICATE DETECTION:
-You may be given a list of existing events already in our database. If the candidate event is clearly the same event as one already listed - even if the title, URL, or description differs - set "duplicate_of" to the ID of the matching existing event.
-
-Signs of a duplicate:
-- Same event name/topic on the same date, possibly listed on different platforms (e.g. one on Eventbrite, one on Luma)
-- Same organization hosting the same type of event at the same time and location
-- Very similar descriptions for the same date/location, just worded differently
-
-Set duplicate_of to null if this is NOT a duplicate. When in doubt, it is NOT a duplicate - only flag clear matches.`;
-
 interface ExistingEvent {
   id: string;
   title: string;
@@ -168,19 +86,8 @@ async function evaluateWithAI(
   },
   existingEvents: ExistingEvent[] = []
 ): Promise<AIEvaluation> {
-  let existingEventsBlock = '';
-  if (existingEvents.length > 0) {
-    const lines = existingEvents.map(e =>
-      `[${e.id}] "${e.title}" | ${e.event_date || 'no date'} | ${e.location || 'unknown'} | ${e.organization || 'unknown'} | ${e.url}`
-    );
-    existingEventsBlock = `\n<existing_events>
-Check if this candidate is a duplicate of any of these existing events. If so, set duplicate_of to the matching event's ID.
-
-${lines.join('\n')}
-</existing_events>\n`;
-  }
-
-  const userPrompt = `Evaluate this event candidate:
+  // Build template variables
+  const scrapedTextVar = `Evaluate this event candidate:
 
 <event>
 Title: ${title}
@@ -193,17 +100,32 @@ Provided description: ${metadata.description || 'None'}
 
 <scraped_page_content>
 ${scrapedText || '[Page could not be scraped]'}
-</scraped_page_content>
-${existingEventsBlock}
-Return ONLY a JSON object, no markdown fences, no explanation outside the JSON.`;
+</scraped_page_content>`;
+
+  let existingEventsVar = '';
+  if (existingEvents.length > 0) {
+    const lines = existingEvents.map(e =>
+      `[${e.id}] "${e.title}" | ${e.event_date || 'no date'} | ${e.location || 'unknown'} | ${e.organization || 'unknown'} | ${e.url}`
+    );
+    existingEventsVar = `<existing_events>
+Check if this candidate is a duplicate of any of these existing events. If so, set duplicate_of to the matching event's ID.
+
+${lines.join('\n')}
+</existing_events>`;
+  }
+
+  const activePrompt = await getActivePrompt("evaluate-event");
+  const fullPrompt = interpolateTemplate(activePrompt.content, {
+    scraped_text: scrapedTextVar,
+    existing_events: existingEventsVar,
+  });
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 1024,
     messages: [
-      { role: 'user', content: userPrompt },
+      { role: 'user', content: fullPrompt },
     ],
-    system: SYSTEM_PROMPT,
   });
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '';

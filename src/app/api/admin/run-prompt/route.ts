@@ -15,7 +15,7 @@ async function verifyAdmin() {
 }
 
 interface RunPromptRequest {
-  promptKey: "recommend" | "extract" | "search";
+  promptKey: "recommend" | "extract" | "search" | "evaluate-event" | "evaluate-community";
   systemPrompt: string;
   userContent: string;
   model?: string;
@@ -110,20 +110,20 @@ export async function POST(req: Request) {
       });
     }
 
-    // Claude/OpenAI prompts (recommend, extract)
-    if (!systemPrompt?.trim()) {
-      return NextResponse.json({ error: "systemPrompt required" }, { status: 400 });
-    }
-    if (!userContent?.trim()) {
-      return NextResponse.json({ error: "userContent required" }, { status: 400 });
+    // Claude/OpenAI prompts (recommend, extract, evaluate-event, evaluate-community)
+    if (!systemPrompt?.trim() && !userContent?.trim()) {
+      return NextResponse.json({ error: "prompt content required" }, { status: 400 });
     }
 
     const task = promptKey === "extract" ? "extract" : "recommend";
+    const defaultMaxTokens = promptKey === "extract" ? 1500
+      : (promptKey === "evaluate-event" || promptKey === "evaluate-community") ? 2000
+      : 8192;
     const result = await llmComplete({
       task,
-      system: systemPrompt,
-      user: userContent,
-      maxTokens: maxTokens || (task === "extract" ? 1500 : 8192),
+      system: systemPrompt || "",
+      user: userContent || "",
+      maxTokens: maxTokens || defaultMaxTokens,
       endpoint: "workbench",
       modelOverride: model || undefined,
     });

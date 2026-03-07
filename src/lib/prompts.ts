@@ -2,7 +2,7 @@ import { getSupabase } from "./supabase";
 
 // ─── Types ──────────────────────────────────────────────────
 
-export type PromptKey = "recommend" | "extract" | "search";
+export type PromptKey = "recommend" | "extract" | "search" | "evaluate-event" | "evaluate-community";
 
 export interface PromptVersion {
   id: number;
@@ -115,7 +115,27 @@ Only include a "title" field if you think a custom title would be more compellin
 
 IMPORTANT: Write in second person ("you", "your"). Be specific and reference their actual job title, company, skills, or background. Never be generic.
 
-IMPORTANT: Never use em dashes in titles or descriptions. Use commas, periods, or semicolons instead.`,
+IMPORTANT: Never use em dashes in titles or descriptions. Use commas, periods, or semicolons instead.
+
+<user_profile>
+{{profile}}
+</user_profile>
+
+<user_answers>
+{{answers}}
+</user_answers>
+
+<user_location>
+{{location}}
+</user_location>
+
+<available_resources>
+{{resources}}
+</available_resources>
+
+{{guides_section}}
+
+Pick the 4-6 BEST resources for this specific person. Include at most 1 event or community.{{guides_instruction}} Return a JSON array ordered by rank (1 = best match).`,
 
   extract: `You are extracting structured profile data from a LinkedIn profile's text content. The text is messy - it was stripped from HTML and contains navigation elements, duplicates, and junk.
 
@@ -153,7 +173,9 @@ IMPORTANT:
 - The "About" section text is the most valuable - capture it fully
 - If someone lists courses, articles, or projects, extract relevant skills from those
 - Languages are sometimes listed with proficiency levels (Native, Professional, etc.)
-- Only include skills, experience, and other details you are confident belong to this specific person`,
+- Only include skills, experience, and other details you are confident belong to this specific person
+
+{{raw_text}}`,
 
   search: `Search for this specific person and report ONLY facts you can verify from search results. Do NOT guess, infer, or fill in gaps.
 
@@ -180,8 +202,207 @@ IMPORTANT RULES:
 - NEVER fabricate roles, companies, education, or achievements. If you only found a name and headline, report only that.
 - If you found very little, say so explicitly. A short accurate response is far better than a long fabricated one.
 - Do NOT include generic biographical filler or assumptions about someone's interests based on their field.
-- Each fact should be traceable to a search result.`,
+- Each fact should be traceable to a search result.
+
+{{query}}`,
+
+  "evaluate-event": `You are an event evaluator for howdoihelp.ai, a directory that helps people find AI safety events near them. Your job is to determine whether a candidate event is real, relevant, and worth listing.
+
+The site focuses on: AI safety, AI alignment, existential risk from AI, AI governance/policy, effective altruism (when AI-related), and responsible AI development.
+
+You must return ONLY a valid JSON object with these exact fields:
+{
+  "is_real_event": boolean,       // Is this an event, fellowship, program, or opportunity? (NOT a blog post, product page, org homepage, etc.)
+  "is_relevant": boolean,         // Is this related to AI safety, alignment, EA, existential risk, AI governance?
+  "relevance_score": number,      // 0.0-1.0: How relevant to AI safety specifically
+  "impact_score": number,         // 0.0-1.0: Expected impact/importance
+  "suggested_ev": number,         // 0.0-1.0: Suggested expected-value ranking score
+  "suggested_friction": number,   // 0.0-1.0: How hard is it to attend (0=one click, 1=major commitment)
+  "event_type": string,           // See event_type options below
+  "clean_title": string,          // Cleaned up, human-readable event title. Never use em dashes.
+  "clean_description": string,    // 1-2 sentence description suitable for a directory listing. Never use em dashes.
+  "event_date": string | null,    // Start date in ISO format (YYYY-MM-DD). Always extract this if possible.
+  "event_end_date": string | null, // End date in ISO format (YYYY-MM-DD) if multi-day, otherwise null
+  "event_time": string | null,    // Start time in "HH:MM" 24h format with timezone, e.g. "18:00 GMT", "14:00 PST". null if unknown.
+  "location": string,             // ALWAYS standardize to "City, Country" for in-person events, or "Online" for virtual events. Never leave as "Unknown" if you can infer it.
+  "is_online": boolean,           // true if this is a virtual/online event, false if in-person or hybrid
+  "organization": string,         // The organizing body, e.g. "MATS", "BlueDot Impact", "EA London", "PauseAI". Use the most recognizable name.
+  "duplicate_of": string | null,  // If this is a duplicate of an existing event, the ID of that event. null if not a duplicate.
+  "reasoning": string             // 2-3 sentence explanation of your evaluation
+}
+
+event_type options:
+- "conference" - multi-day conferences, summits
+- "meetup" - local community meetups, socials, coffee chats
+- "hackathon" - hackathons, alignment jams, build events
+- "workshop" - hands-on workshops, bootcamps, training sessions
+- "talk" - talks, lectures, presentations, panels
+- "social" - casual socials, dinners, happy hours
+- "course" - structured courses, reading groups, study groups
+- "fellowship" - research fellowships, residencies (e.g. MATS, PIBBSS, Interact)
+- "program" - structured programs, bootcamps, accelerators (e.g. BlueDot, AI Safety Camp)
+- "other"
+
+Scoring guidelines:
+- relevance_score 0.9-1.0: Core AI safety (EAG, MATS, alignment workshops, AI safety camps)
+- relevance_score 0.7-0.9: Strongly adjacent (EA events with AI tracks, AI governance conferences, rationalist meetups)
+- relevance_score 0.5-0.7: Related (AI ethics events, tech policy, biosecurity with AI component)
+- relevance_score 0.3-0.5: Tangential (general tech events that mention AI safety, career fairs with AI roles)
+- relevance_score 0.0-0.3: Not relevant (pure ML/product events, crypto, unrelated conferences)
+
+impact_score guidelines:
+- 0.8-1.0: Major conferences (EAG, major alignment workshops, MATS cohort)
+- 0.6-0.8: Significant events (regional conferences, hackathons, intensive workshops)
+- 0.4-0.6: Solid community events (reading groups, talks by notable researchers, local meetups in large cities)
+- 0.2-0.4: Small or routine events (regular coffee chats, casual socials)
+- 0.0-0.2: Minimal impact
+
+CRITICAL - Online event scoring:
+This directory helps people find events IN THEIR LOCAL CITY. Online events have no location advantage and are rarely specifically relevant to any individual user. Therefore:
+- Online events must be EXCEPTIONALLY noteworthy to get a high suggested_ev (e.g. a major virtual conference with top AI safety researchers, a MATS info session, an EAG virtual event)
+- Routine online meetups, webinars, and generic virtual talks should get suggested_ev <= 0.15 regardless of relevance
+- Only give an online event suggested_ev > 0.3 if it would be genuinely exciting for someone in the AI safety community regardless of where they live
+- In-person events in a specific city are inherently more valuable for this directory
+
+suggested_ev = roughly relevance_score * impact_score, but HEAVILY discount online events as described above.
+
+friction guidelines:
+- 0.0-0.1: Click a link, show up to a casual event
+- 0.1-0.3: RSVP required, small time commitment
+- 0.3-0.5: Application required, multi-day, or travel needed
+- 0.5-0.8: Selective application, significant travel, multi-week commitment
+- 0.8-1.0: Highly selective, life-changing commitment (fellowships, relocations)
+
+Date/time/location formatting:
+- ALWAYS extract and standardize the date, even if the source data is messy
+- For location, ALWAYS use the format "City, Country" (e.g. "London, UK", "San Francisco, US", "Berlin, Germany")
+- Never return "Unknown" for location if you can infer it from any available data (URL, description, org name, venue)
+- For organization, use the most commonly recognized short name (e.g. "MATS" not "Machine Alignment Technical Safety program")
+
+DUPLICATE DETECTION:
+You may be given a list of existing events already in our database. If the candidate event is clearly the same event as one already listed - even if the title, URL, or description differs - set "duplicate_of" to the ID of the matching existing event.
+
+Signs of a duplicate:
+- Same event name/topic on the same date, possibly listed on different platforms (e.g. one on Eventbrite, one on Luma)
+- Same organization hosting the same type of event at the same time and location
+- Very similar descriptions for the same date/location, just worded differently
+
+Set duplicate_of to null if this is NOT a duplicate. When in doubt, it is NOT a duplicate - only flag clear matches.
+
+{{scraped_text}}
+
+{{existing_events}}`,
+
+  "evaluate-community": `You are a community evaluator for howdoihelp.ai, a directory that helps people find AI safety communities and groups near them. Your job is to determine whether a candidate community is real, relevant, active, and worth listing.
+
+The site focuses on: AI safety, AI alignment, existential risk from AI, AI governance/policy, effective altruism, rationality, and responsible AI development.
+
+You must return ONLY a valid JSON object with these exact fields:
+{
+  "is_real_community": boolean,       // Is this an actual community, group, or organization people can join? (NOT a blog, product page, news article, course, individual's profile, etc.)
+  "is_relevant": boolean,             // Is this related to AI safety, alignment, EA, existential risk, AI governance, rationality?
+  "relevance_score": number,          // 0.0-1.0: How relevant to AI safety specifically
+  "quality_score": number,            // 0.0-1.0: How active, well-organized, and useful is this community
+  "suggested_ev": number,             // 0.0-1.0: Overall expected value of listing this community
+  "suggested_friction": number,       // 0.0-1.0: How hard is it to join (0=one click, 1=application+selective)
+  "community_type": string,           // See community_type options below
+  "clean_title": string,              // Cleaned up, human-readable community name. Never use em dashes.
+  "clean_description": string,        // 1-2 sentence description suitable for a directory listing. Be specific about what the community does and who it's for. Never use em dashes.
+  "clean_location": string,           // Standardized: "City, Country" for local groups, or "Online" for virtual communities
+  "is_online": boolean,               // true if this is a purely online/virtual community, false if it has in-person meetups
+  "organization": string,             // The parent organization, e.g. "EA Forum", "PauseAI", "LessWrong". Use the most recognizable name.
+  "duplicate_of": string | null,      // If this is a duplicate of an existing community, the ID of that community. null if not a duplicate.
+  "reasoning": string                 // 2-3 sentence explanation of your evaluation
+}
+
+community_type options:
+- "discord" - Discord servers
+- "meetup" - Meetup.com groups or regular in-person meetups
+- "facebook-group" - Facebook groups
+- "slack" - Slack workspaces
+- "telegram" - Telegram groups/channels
+- "whatsapp" - WhatsApp groups
+- "forum-group" - Forum-hosted local group pages (EA Forum, LessWrong)
+- "website" - Standalone website for a community/organization
+- "mailing-list" - Email lists, newsletters
+- "subreddit" - Reddit communities
+- "linkedin" - LinkedIn groups
+- "other"
+
+Scoring guidelines:
+
+relevance_score:
+- 0.9-1.0: Core AI safety community (alignment research groups, MATS alumni, AI safety reading groups)
+- 0.7-0.9: Strongly adjacent (EA groups, rationality groups, AI governance networks)
+- 0.5-0.7: Related (tech policy groups, biosecurity communities with AI component)
+- 0.3-0.5: Tangential (general EA groups without AI focus, tech communities that discuss AI safety occasionally)
+- 0.0-0.3: Not relevant (general tech groups, crypto, unrelated)
+
+quality_score:
+- 0.8-1.0: Large, active community with regular events, hundreds of members, strong content
+- 0.6-0.8: Active community with regular meetups or discussions, clear purpose
+- 0.4-0.6: Moderately active, some regular activity, decent description and structure
+- 0.2-0.4: Low activity signals, sparse description, unclear if still active
+- 0.0-0.2: Likely dead, empty, or barely functional
+
+Quality signals to look for:
+- Platform type: Discord/Slack/Meetup = likely more active than a bare forum page
+- Description quality: Well-written, specific descriptions suggest active curation
+- Member counts or event counts if visible
+- Recent activity dates if visible
+- Whether the link actually goes to a joinable community vs. a dead page
+
+suggested_ev = roughly relevance_score * quality_score, but:
+- Boost local in-person communities (they're harder to find and more valuable for connection)
+- Discount generic online communities that provide little unique value
+- Boost communities with clear, specific focus areas
+
+friction guidelines:
+- 0.0-0.1: Click a link and you're in (open Discord, public Meetup)
+- 0.1-0.3: Need to request to join or create an account
+- 0.3-0.5: Application or approval required
+- 0.5-0.8: Selective admission, interview, or significant barrier
+- 0.8-1.0: Highly exclusive, invitation only
+
+Location formatting:
+- For local groups, ALWAYS use "City, Country" format (e.g. "London, UK", "San Francisco, US")
+- For online-only communities, use "Online"
+- Never return "Global" unless it's truly a global organization with no specific location
+- Infer location from the community name, description, or URL when possible (e.g. "EA London" -> "London, UK")
+
+DUPLICATE DETECTION:
+You may be given a list of existing communities already in our database. If the candidate is clearly the same community as one already listed - even if the URL or name differs slightly - set "duplicate_of" to the ID of the matching existing community.
+
+Signs of a duplicate:
+- Same group name appearing under different platform links (e.g. Discord + Meetup for the same EA city group)
+- Same location group from different scraped sources
+- Very similar names for the same city (e.g. "EA Berlin" and "Effective Altruism Berlin")
+
+Set duplicate_of to null if this is NOT a duplicate. When in doubt, it is NOT a duplicate.
+
+{{scraped_text}}
+
+{{existing_communities}}`,
 };
+
+// ─── Template Utilities ──────────────────────────────────────
+
+/** Detect all {{variableName}} placeholders in a template */
+export function detectTemplateVariables(template: string): string[] {
+  const matches = template.matchAll(/\{\{(\w+)\}\}/g);
+  return [...new Set([...matches].map((m) => m[1]))];
+}
+
+/** Replace {{variableName}} placeholders with values from the vars map */
+export function interpolateTemplate(
+  template: string,
+  vars: Record<string, string>,
+): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (match, name) => {
+    const val = vars[name];
+    return val !== undefined ? val : match;
+  });
+}
 
 // ─── Cache ──────────────────────────────────────────────────
 

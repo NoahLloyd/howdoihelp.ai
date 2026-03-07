@@ -21,6 +21,7 @@ dotenv.config({ path: '.env.local' });
 import Anthropic from '@anthropic-ai/sdk';
 import { scrapeUrl } from './lib/scrape-url';
 import { getSupabase } from './lib/insert-candidates';
+import { getActivePrompt, interpolateTemplate } from '../src/lib/prompts';
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -58,93 +59,6 @@ interface AIEvaluation {
   reasoning: string;
 }
 
-const SYSTEM_PROMPT = `You are a community evaluator for howdoihelp.ai, a directory that helps people find AI safety communities and groups near them. Your job is to determine whether a candidate community is real, relevant, active, and worth listing.
-
-The site focuses on: AI safety, AI alignment, existential risk from AI, AI governance/policy, effective altruism, rationality, and responsible AI development.
-
-You must return ONLY a valid JSON object with these exact fields:
-{
-  "is_real_community": boolean,       // Is this an actual community, group, or organization people can join? (NOT a blog, product page, news article, course, individual's profile, etc.)
-  "is_relevant": boolean,             // Is this related to AI safety, alignment, EA, existential risk, AI governance, rationality?
-  "relevance_score": number,          // 0.0-1.0: How relevant to AI safety specifically
-  "quality_score": number,            // 0.0-1.0: How active, well-organized, and useful is this community
-  "suggested_ev": number,             // 0.0-1.0: Overall expected value of listing this community
-  "suggested_friction": number,       // 0.0-1.0: How hard is it to join (0=one click, 1=application+selective)
-  "community_type": string,           // See community_type options below
-  "clean_title": string,              // Cleaned up, human-readable community name. Never use em dashes.
-  "clean_description": string,        // 1-2 sentence description suitable for a directory listing. Be specific about what the community does and who it's for. Never use em dashes.
-  "clean_location": string,           // Standardized: "City, Country" for local groups, or "Online" for virtual communities
-  "is_online": boolean,               // true if this is a purely online/virtual community, false if it has in-person meetups
-  "organization": string,             // The parent organization, e.g. "EA Forum", "PauseAI", "LessWrong". Use the most recognizable name.
-  "duplicate_of": string | null,      // If this is a duplicate of an existing community, the ID of that community. null if not a duplicate.
-  "reasoning": string                 // 2-3 sentence explanation of your evaluation
-}
-
-community_type options:
-- "discord" - Discord servers
-- "meetup" - Meetup.com groups or regular in-person meetups
-- "facebook-group" - Facebook groups
-- "slack" - Slack workspaces
-- "telegram" - Telegram groups/channels
-- "whatsapp" - WhatsApp groups
-- "forum-group" - Forum-hosted local group pages (EA Forum, LessWrong)
-- "website" - Standalone website for a community/organization
-- "mailing-list" - Email lists, newsletters
-- "subreddit" - Reddit communities
-- "linkedin" - LinkedIn groups
-- "other"
-
-Scoring guidelines:
-
-relevance_score:
-- 0.9-1.0: Core AI safety community (alignment research groups, MATS alumni, AI safety reading groups)
-- 0.7-0.9: Strongly adjacent (EA groups, rationality groups, AI governance networks)
-- 0.5-0.7: Related (tech policy groups, biosecurity communities with AI component)
-- 0.3-0.5: Tangential (general EA groups without AI focus, tech communities that discuss AI safety occasionally)
-- 0.0-0.3: Not relevant (general tech groups, crypto, unrelated)
-
-quality_score:
-- 0.8-1.0: Large, active community with regular events, hundreds of members, strong content
-- 0.6-0.8: Active community with regular meetups or discussions, clear purpose
-- 0.4-0.6: Moderately active, some regular activity, decent description and structure
-- 0.2-0.4: Low activity signals, sparse description, unclear if still active
-- 0.0-0.2: Likely dead, empty, or barely functional
-
-Quality signals to look for:
-- Platform type: Discord/Slack/Meetup = likely more active than a bare forum page
-- Description quality: Well-written, specific descriptions suggest active curation
-- Member counts or event counts if visible
-- Recent activity dates if visible
-- Whether the link actually goes to a joinable community vs. a dead page
-
-suggested_ev = roughly relevance_score * quality_score, but:
-- Boost local in-person communities (they're harder to find and more valuable for connection)
-- Discount generic online communities that provide little unique value
-- Boost communities with clear, specific focus areas
-
-friction guidelines:
-- 0.0-0.1: Click a link and you're in (open Discord, public Meetup)
-- 0.1-0.3: Need to request to join or create an account
-- 0.3-0.5: Application or approval required
-- 0.5-0.8: Selective admission, interview, or significant barrier
-- 0.8-1.0: Highly exclusive, invitation only
-
-Location formatting:
-- For local groups, ALWAYS use "City, Country" format (e.g. "London, UK", "San Francisco, US")
-- For online-only communities, use "Online"
-- Never return "Global" unless it's truly a global organization with no specific location
-- Infer location from the community name, description, or URL when possible (e.g. "EA London" → "London, UK")
-
-DUPLICATE DETECTION:
-You may be given a list of existing communities already in our database. If the candidate is clearly the same community as one already listed - even if the URL or name differs slightly - set "duplicate_of" to the ID of the matching existing community.
-
-Signs of a duplicate:
-- Same group name appearing under different platform links (e.g. Discord + Meetup for the same EA city group)
-- Same location group from different scraped sources
-- Very similar names for the same city (e.g. "EA Berlin" and "Effective Altruism Berlin")
-
-Set duplicate_of to null if this is NOT a duplicate. When in doubt, it is NOT a duplicate.`;
-
 interface ExistingCommunity {
   id: string;
   title: string;
@@ -165,19 +79,8 @@ async function evaluateWithAI(
   },
   existingCommunities: ExistingCommunity[] = []
 ): Promise<AIEvaluation> {
-  let existingBlock = '';
-  if (existingCommunities.length > 0) {
-    const lines = existingCommunities.map(e =>
-      `[${e.id}] "${e.title}" | ${e.location || 'unknown'} | ${e.organization || 'unknown'} | ${e.url}`
-    );
-    existingBlock = `\n<existing_communities>
-Check if this candidate is a duplicate of any of these existing communities. If so, set duplicate_of to the matching community's ID.
-
-${lines.join('\n')}
-</existing_communities>\n`;
-  }
-
-  const userPrompt = `Evaluate this community candidate:
+  // Build template variables
+  const scrapedTextVar = `Evaluate this community candidate:
 
 <community>
 Title: ${title}
@@ -190,17 +93,32 @@ Provided description: ${metadata.description || 'None'}
 
 <scraped_page_content>
 ${scrapedText || '[Page could not be scraped]'}
-</scraped_page_content>
-${existingBlock}
-Return ONLY a JSON object, no markdown fences, no explanation outside the JSON.`;
+</scraped_page_content>`;
+
+  let existingCommunitiesVar = '';
+  if (existingCommunities.length > 0) {
+    const lines = existingCommunities.map(e =>
+      `[${e.id}] "${e.title}" | ${e.location || 'unknown'} | ${e.organization || 'unknown'} | ${e.url}`
+    );
+    existingCommunitiesVar = `<existing_communities>
+Check if this candidate is a duplicate of any of these existing communities. If so, set duplicate_of to the matching community's ID.
+
+${lines.join('\n')}
+</existing_communities>`;
+  }
+
+  const activePrompt = await getActivePrompt("evaluate-community");
+  const fullPrompt = interpolateTemplate(activePrompt.content, {
+    scraped_text: scrapedTextVar,
+    existing_communities: existingCommunitiesVar,
+  });
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 1024,
     messages: [
-      { role: 'user', content: userPrompt },
+      { role: 'user', content: fullPrompt },
     ],
-    system: SYSTEM_PROMPT,
   });
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '';

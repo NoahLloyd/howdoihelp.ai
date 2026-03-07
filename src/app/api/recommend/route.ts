@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { llmComplete, extractJson } from "@/lib/llm";
-import { getActivePrompt } from "@/lib/prompts";
+import { getActivePrompt, interpolateTemplate } from "@/lib/prompts";
+import { scoreResource } from "@/lib/ranking";
 import type {
   EnrichedProfile,
   UserAnswers,
@@ -8,6 +9,8 @@ import type {
   Resource,
   RecommendedResource,
   GuideRecommendation,
+  ScoredResource,
+  ResourceCategory,
 } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -212,13 +215,23 @@ export async function POST(req: Request) {
     // Pre-filter guides based on geographic preference, availability, etc.
     const guides = await filterGuides(allGuides, geo);
 
-    // Build the user prompt with all context
-    const userPrompt = buildUserPrompt(profile, answers, geo, resources, guides);
+    // ─── Pre-filter resources to reduce token cost ──────────
+    const filteredResources = preFilterResources(resources, answers, geo);
+    const filteredGuides = preFilterGuides(guides, answers, geo);
+    console.log(
+      `[recommend] Pre-filtered ${resources.length} → ${filteredResources.length} resources, ${guides.length} → ${filteredGuides.length} guides`
+    );
+
+    // Build variable values for template interpolation
+    const templateVars = buildTemplateVars(profile, answers, geo, filteredResources, filteredGuides);
+
+    // Interpolate the template and send as single user message
+    const fullPrompt = interpolateTemplate(activePrompt.content, templateVars);
 
     const result = await llmComplete({
       task: "recommend",
-      system: activePrompt.content,
-      user: userPrompt,
+      system: "",
+      user: fullPrompt,
       maxTokens: 8192,
       endpoint: "messages.create",
       modelOverride: activePrompt.model || undefined,
@@ -316,51 +329,189 @@ export async function POST(req: Request) {
   }
 }
 
-// ─── Prompt Builder ──────────────────────────────────────────
+// ─── Pre-filter: Resources ──────────────────────────────────
 
-function buildUserPrompt(
+const MAX_RESOURCES_FOR_LLM = 50;
+const CATEGORY_CAP = 18;
+
+/**
+ * Score and pre-filter resources before sending to Claude.
+ * Uses the same algorithmic scoring as the fallback ranker to
+ * reduce hundreds of resources to a manageable shortlist (~50).
+ * Ensures category diversity so Claude sees events, programs,
+ * communities, letters, and other content.
+ */
+function preFilterResources(
+  resources: Resource[],
+  answers: UserAnswers,
+  geo: GeoData,
+): Resource[] {
+  // If already small enough, no filtering needed
+  if (resources.length <= MAX_RESOURCES_FOR_LLM) {
+    return resources;
+  }
+
+  // Score everything
+  const scored = resources
+    .map((r) => scoreResource(r, answers, geo, "A"))
+    .filter((s) => s.score > 0);
+
+  // Group by category
+  const buckets: Record<string, ScoredResource[]> = {};
+  for (const s of scored) {
+    const cat = s.resource.category;
+    if (!buckets[cat]) buckets[cat] = [];
+    buckets[cat].push(s);
+  }
+
+  // Sort each bucket by score
+  for (const cat of Object.keys(buckets)) {
+    buckets[cat].sort((a, b) => b.score - a.score);
+  }
+
+  // Take top N from each category
+  const selected = new Set<string>();
+  for (const cat of Object.keys(buckets)) {
+    const topN = buckets[cat].slice(0, CATEGORY_CAP);
+    for (const s of topN) selected.add(s.resource.id);
+  }
+
+  // Always include urgent items (deadline within 30 days, high activity)
+  const now = Date.now();
+  for (const s of scored) {
+    if (selected.has(s.resource.id)) continue;
+    const r = s.resource;
+    if (r.deadline_date) {
+      const daysUntil = (new Date(r.deadline_date).getTime() - now) / 86_400_000;
+      if (daysUntil >= 0 && daysUntil <= 30) {
+        selected.add(r.id);
+        continue;
+      }
+    }
+    if ((r.activity_score ?? 0) >= 0.9 && s.score > 0.2) {
+      selected.add(r.id);
+    }
+  }
+
+  // If still under cap, fill with highest-scoring from any category
+  if (selected.size < MAX_RESOURCES_FOR_LLM) {
+    const remaining = scored
+      .filter((s) => !selected.has(s.resource.id))
+      .sort((a, b) => b.score - a.score);
+    for (const s of remaining) {
+      if (selected.size >= MAX_RESOURCES_FOR_LLM) break;
+      selected.add(s.resource.id);
+    }
+  }
+
+  // Return in original order to avoid biasing Claude
+  return resources.filter((r) => selected.has(r.id));
+}
+
+// ─── Pre-filter: Guides ─────────────────────────────────────
+
+const MAX_GUIDES_FOR_LLM = 10;
+
+/**
+ * Pre-filter guides for relevance. Lightweight scoring based on
+ * location match, background overlap, and career stage fit.
+ */
+function preFilterGuides(
+  guides: GuideWithProfile[],
+  answers: UserAnswers,
+  geo: GeoData,
+): GuideWithProfile[] {
+  if (guides.length <= MAX_GUIDES_FOR_LLM) return guides;
+
+  const scored = guides.map((g) => {
+    let score = 1.0;
+
+    // Location boost: guide in same area as user
+    if (g.location && geo.city) {
+      const loc = g.location.toLowerCase();
+      const city = geo.city.toLowerCase();
+      if (loc.includes(city) || (geo.region && loc.includes(geo.region.toLowerCase()))) {
+        score *= 1.3;
+      } else if (geo.country && loc.includes(geo.country.toLowerCase())) {
+        score *= 1.1;
+      }
+      // In-person availability matters more for local users
+      if (g.is_available_in_person && loc.includes(city)) score *= 1.2;
+    }
+
+    // Position/background match
+    if (answers.positionType && g.preferred_backgrounds.length > 0) {
+      const matches = g.preferred_backgrounds.some((b) =>
+        b.toLowerCase().includes(answers.positionType!.replace("_", " "))
+      );
+      if (matches) score *= 1.3;
+    }
+
+    // Career stage hint from position type
+    if (answers.positionType === "student" && g.preferred_career_stages.length > 0) {
+      if (g.preferred_career_stages.some((s) => s.toLowerCase().includes("student") || s.toLowerCase().includes("early"))) {
+        score *= 1.2;
+      }
+    }
+
+    return { guide: g, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, MAX_GUIDES_FOR_LLM).map((s) => s.guide);
+}
+
+// ─── Template Variable Builders ──────────────────────────────
+
+function buildTemplateVars(
   profile: EnrichedProfile | undefined,
   answers: UserAnswers,
   geo: GeoData,
   resources: Resource[],
-  guides: GuideWithProfile[]
-): string {
-  // Build profile section
-  const profileLines: string[] = [];
+  guides: GuideWithProfile[],
+): Record<string, string> {
+  return {
+    profile: buildProfileVar(profile, answers),
+    answers: buildAnswersVar(answers),
+    location: buildLocationVar(geo),
+    resources: buildResourcesVar(resources),
+    guides_section: buildGuidesVar(guides),
+    guides_instruction: guides.length > 0 ? " You may also include 1 guide if there's a strong match." : "",
+  };
+}
 
-  // Structured profile data (high/medium confidence)
+function buildProfileVar(profile: EnrichedProfile | undefined, answers: UserAnswers): string {
+  const lines: string[] = [];
+
   if (profile) {
-    if (profile.dataSource) profileLines.push(`Data source: ${profile.dataSource} (${profile.dataSource === "bright_data" || profile.dataSource === "github_api" ? "high" : "medium"} confidence)`);
+    if (profile.dataSource) lines.push(`Data source: ${profile.dataSource} (${profile.dataSource === "bright_data" || profile.dataSource === "github_api" ? "high" : "medium"} confidence)`);
   }
-  // Web search text as supplementary (low confidence)
   if (answers.profileText && !profile) {
-    // Only use web search as primary source if no structured profile
-    profileLines.push(`[Web search results — low confidence]\n${answers.profileText}`);
+    lines.push(`[Web search results — low confidence]\n${answers.profileText}`);
   } else if (answers.profileText && profile) {
-    // Append web search as supplement after structured data
-    profileLines.push(`\n[Supplementary web search — low confidence, only use to fill gaps]\n${answers.profileText}`);
+    lines.push(`\n[Supplementary web search — low confidence, only use to fill gaps]\n${answers.profileText}`);
   }
   if (profile) {
-    if (profile.fullName) profileLines.push(`Name: ${profile.fullName}`);
-    if (profile.headline) profileLines.push(`Headline: ${profile.headline}`);
+    if (profile.fullName) lines.push(`Name: ${profile.fullName}`);
+    if (profile.headline) lines.push(`Headline: ${profile.headline}`);
     if (profile.currentTitle && profile.currentCompany) {
-      profileLines.push(`Current role: ${profile.currentTitle} at ${profile.currentCompany}`);
+      lines.push(`Current role: ${profile.currentTitle} at ${profile.currentCompany}`);
     } else if (profile.currentTitle) {
-      profileLines.push(`Current role: ${profile.currentTitle}`);
+      lines.push(`Current role: ${profile.currentTitle}`);
     }
-    if (profile.location) profileLines.push(`Location: ${profile.location}`);
+    if (profile.location) lines.push(`Location: ${profile.location}`);
     if (profile.currentCompany && !profile.currentTitle) {
-      profileLines.push(`Company: ${profile.currentCompany}`);
+      lines.push(`Company: ${profile.currentCompany}`);
     }
-    if (profile.summary) profileLines.push(`Summary: ${profile.summary}`);
+    if (profile.summary) lines.push(`Summary: ${profile.summary}`);
     if (profile.skills.length > 0) {
-      profileLines.push(`Background & credentials:\n${profile.skills.slice(0, 30).map((s) => `  - ${s}`).join("\n")}`);
+      lines.push(`Background & credentials:\n${profile.skills.slice(0, 30).map((s) => `  - ${s}`).join("\n")}`);
     }
     if (profile.experience.length > 0) {
       const expLines = profile.experience.slice(0, 5).map(
         (e) => `  - ${e.title ? `${e.title} at ` : ""}${e.company}${e.description ? `: ${e.description.slice(0, 100)}` : ""}`
       );
-      profileLines.push(`Experience:\n${expLines.join("\n")}`);
+      lines.push(`Experience:\n${expLines.join("\n")}`);
     }
     if (profile.education.length > 0) {
       const eduLines = profile.education.slice(0, 3).map((e) => {
@@ -369,37 +520,43 @@ function buildUserPrompt(
         if (e.activities) line += ` - Activities: ${e.activities.slice(0, 200)}`;
         return line;
       });
-      profileLines.push(`Education:\n${eduLines.join("\n")}`);
+      lines.push(`Education:\n${eduLines.join("\n")}`);
     }
     if (profile.repos && profile.repos.length > 0) {
       const repoLines = profile.repos.slice(0, 5).map(
         (r) => `  - ${r.name} (${r.language || "unknown"}, ${r.stars} stars)${r.description ? `: ${r.description}` : ""}`
       );
-      profileLines.push(`Top GitHub repos:\n${repoLines.join("\n")}`);
+      lines.push(`Top GitHub repos:\n${repoLines.join("\n")}`);
     }
-    if (profile.followers != null) profileLines.push(`GitHub followers: ${profile.followers}`);
-    profileLines.push(`Profile platform: ${profile.platform}`);
+    if (profile.followers != null) lines.push(`GitHub followers: ${profile.followers}`);
+    lines.push(`Profile platform: ${profile.platform}`);
   }
-  // Include profile URL from answers if available
-  if (answers.profileUrl && !answers.profileText) profileLines.push(`Profile URL: ${answers.profileUrl}`);
-  if (answers.profilePlatform && !profile && !answers.profileText) profileLines.push(`Profile platform: ${answers.profilePlatform}`);
-  if (profileLines.length === 0) profileLines.push("No profile data available - personalize based on answers and location only.");
+  if (answers.profileUrl && !answers.profileText) lines.push(`Profile URL: ${answers.profileUrl}`);
+  if (answers.profilePlatform && !profile && !answers.profileText) lines.push(`Profile platform: ${answers.profilePlatform}`);
+  if (lines.length === 0) lines.push("No profile data available - personalize based on answers and location only.");
 
-  // Build answers section
-  const answerLines: string[] = [];
-  answerLines.push(`Time commitment: ${answers.time}`);
-  if (answers.intent) answerLines.push(`Intent: ${answers.intent}`);
-  if (answers.positioned) answerLines.push(`Self-identified as uniquely positioned`);
-  if (answers.positionType) answerLines.push(`Position type: ${answers.positionType}`);
+  return lines.join("\n");
+}
 
-  // Build geo section
-  const geoLines: string[] = [];
-  if (geo.city) geoLines.push(`City: ${geo.city}`);
-  if (geo.region) geoLines.push(`Region: ${geo.region}`);
-  geoLines.push(`Country: ${geo.country} (${geo.countryCode})`);
+function buildAnswersVar(answers: UserAnswers): string {
+  const lines: string[] = [];
+  lines.push(`Time commitment: ${answers.time}`);
+  if (answers.intent) lines.push(`Intent: ${answers.intent}`);
+  if (answers.positioned) lines.push(`Self-identified as uniquely positioned`);
+  if (answers.positionType) lines.push(`Position type: ${answers.positionType}`);
+  return lines.join("\n");
+}
 
-  // Build resources section - compact format to save tokens
-  const resourceLines = resources.map((r) => {
+function buildLocationVar(geo: GeoData): string {
+  const lines: string[] = [];
+  if (geo.city) lines.push(`City: ${geo.city}`);
+  if (geo.region) lines.push(`Region: ${geo.region}`);
+  lines.push(`Country: ${geo.country} (${geo.countryCode})`);
+  return lines.join("\n");
+}
+
+function buildResourcesVar(resources: Resource[]): string {
+  return resources.map((r) => {
     const tags = [
       r.category,
       r.location,
@@ -411,44 +568,23 @@ function buildUserPrompt(
     if (r.event_date) tags.push(`date=${r.event_date}`);
     if (r.deadline_date) tags.push(`deadline=${r.deadline_date}`);
     return `[${r.id}] "${r.title}" - ${r.description} (${tags.join(", ")})`;
+  }).join("\n\n");
+}
+
+function buildGuidesVar(guides: GuideWithProfile[]): string {
+  if (guides.length === 0) return "";
+  const guideLines = guides.map((g) => {
+    const parts = [`[${g.id}] "${g.display_name || "Guide"}"${g.headline ? ` - ${g.headline}` : ""}`];
+    if (g.topics.length > 0) parts.push(`  Topics: ${g.topics.join(", ")}`);
+    if (g.best_for) parts.push(`  Best for: ${g.best_for}`);
+    if (g.not_a_good_fit) parts.push(`  NOT a good fit for: ${g.not_a_good_fit}`);
+    if (g.preferred_career_stages.length > 0) parts.push(`  Preferred career stages: ${g.preferred_career_stages.join(", ")}`);
+    if (g.preferred_backgrounds.length > 0) parts.push(`  Preferred backgrounds: ${g.preferred_backgrounds.join(", ")}`);
+    if (g.preferred_experience_level.length > 0) parts.push(`  Preferred AI safety experience: ${g.preferred_experience_level.join(", ")}`);
+    if (g.location) parts.push(`  Location: ${g.location}`);
+    if (g.geographic_preference !== "anywhere") parts.push(`  Geographic preference: ${g.geographic_preference}`);
+    if (g.languages.length > 1) parts.push(`  Languages: ${g.languages.join(", ")}`);
+    return parts.join("\n");
   });
-
-  // Build guides section
-  let guidesSection = "";
-  if (guides.length > 0) {
-    const guideLines = guides.map((g) => {
-      const parts = [`[${g.id}] "${g.display_name || "Guide"}"${g.headline ? ` — ${g.headline}` : ""}`];
-      if (g.topics.length > 0) parts.push(`  Topics: ${g.topics.join(", ")}`);
-      if (g.best_for) parts.push(`  Best for: ${g.best_for}`);
-      if (g.not_a_good_fit) parts.push(`  NOT a good fit for: ${g.not_a_good_fit}`);
-      if (g.preferred_career_stages.length > 0) parts.push(`  Preferred career stages: ${g.preferred_career_stages.join(", ")}`);
-      if (g.preferred_backgrounds.length > 0) parts.push(`  Preferred backgrounds: ${g.preferred_backgrounds.join(", ")}`);
-      if (g.preferred_experience_level.length > 0) parts.push(`  Preferred AI safety experience: ${g.preferred_experience_level.join(", ")}`);
-      if (g.location) parts.push(`  Location: ${g.location}`);
-      if (g.geographic_preference !== "anywhere") parts.push(`  Geographic preference: ${g.geographic_preference}`);
-      if (g.languages.length > 1) parts.push(`  Languages: ${g.languages.join(", ")}`);
-      return parts.join("\n");
-    });
-    guidesSection = `\n\n<available_guides>
-${guideLines.join("\n\n")}
-</available_guides>`;
-  }
-
-  return `<user_profile>
-${profileLines.join("\n")}
-</user_profile>
-
-<user_answers>
-${answerLines.join("\n")}
-</user_answers>
-
-<user_location>
-${geoLines.join("\n")}
-</user_location>
-
-<available_resources>
-${resourceLines.join("\n\n")}
-</available_resources>${guidesSection}
-
-Pick the 4-6 BEST resources for this specific person. Include at most 1 event or community.${guides.length > 0 ? " You may also include 1 guide if there's a strong match." : ""} Return a JSON array ordered by rank (1 = best match).`;
+  return `\n<available_guides>\n${guideLines.join("\n\n")}\n</available_guides>`;
 }

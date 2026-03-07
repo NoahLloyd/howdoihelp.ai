@@ -177,7 +177,7 @@ function activityFit(resource: Resource): number {
   return 0.2 + score * 0.8;
 }
 
-function scoreResource(
+export function scoreResource(
   resource: Resource,
   answers: UserAnswers,
   geo: GeoData,

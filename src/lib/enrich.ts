@@ -3,7 +3,7 @@ import { detectPlatform } from "./profile";
 import { scrapeLinkedInProfile } from "./linkedin-scraper";
 import { scrapeWithBrightData } from "./brightdata";
 import { llmComplete, extractJson } from "./llm";
-import { getActivePrompt } from "./prompts";
+import { getActivePrompt, interpolateTemplate } from "./prompts";
 
 // ─── LLM Profile Extraction ────────────────────────────────
 
@@ -17,10 +17,11 @@ async function llmExtractProfile(
 
   try {
     const activePrompt = await getActivePrompt("extract");
+    const fullPrompt = interpolateTemplate(activePrompt.content, { raw_text: rawText });
     const result = await llmComplete({
       task: "extract",
-      system: activePrompt.content,
-      user: rawText,
+      system: "",
+      user: fullPrompt,
       maxTokens: 1500,
       endpoint: "extract",
       modelOverride: activePrompt.model || undefined,

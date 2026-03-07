@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import type { ApiUsageEntry } from "@/types";
-import { getActivePrompt } from "./prompts";
+import { getActivePrompt, interpolateTemplate } from "./prompts";
 
 // Perplexity's Sonar API is OpenAI-compatible
 const BASE_URL = "https://api.perplexity.ai";
@@ -54,17 +54,14 @@ export async function searchPerson(query: string): Promise<{
 
   try {
     const activePrompt = await getActivePrompt("search");
+    const queryValue = query.startsWith('"') ? query : `"${query}"`;
+    const fullPrompt = interpolateTemplate(activePrompt.content, { query: queryValue });
     const response = await client.chat.completions.create({
       model: MODEL,
       messages: [
         {
-          role: "system",
-          content: activePrompt.content,
-        },
-        {
           role: "user",
-          // Wrap in quotes if not already quoted to force exact-name matching
-          content: query.startsWith('"') ? query : `"${query}"`,
+          content: fullPrompt,
         },
       ],
     });
