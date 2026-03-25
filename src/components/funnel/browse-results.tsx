@@ -494,7 +494,7 @@ function ResourceList({
             <ResourceCard
               scored={{ resource, score: resource.ev_general, matchReasons: [] }}
               variant={variant}
-              isPrimary={highlightFirst && i === 0}
+
               onClickTrack={(id) => onClickTrack(id, i)}
             />
           </motion.div>

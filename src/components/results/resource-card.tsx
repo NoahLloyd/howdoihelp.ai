@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { ScoredResource, Variant } from "@/types";
 import { trackUrl, formatTime } from "@/lib/utils";
 import { OrgLogo } from "@/components/results/org-logo";
@@ -10,7 +9,6 @@ import { Calendar, MapPin, Sparkles } from "lucide-react";
 interface ResourceCardProps {
   scored: ScoredResource;
   variant: Variant;
-  isPrimary?: boolean;
   customTitle?: string;
   customDescription?: string;
   matchReason?: string;
@@ -20,7 +18,6 @@ interface ResourceCardProps {
 export function ResourceCard({
   scored,
   variant,
-  isPrimary = false,
   customTitle,
   customDescription,
   matchReason,
@@ -46,9 +43,6 @@ export function ResourceCard({
       onClick={() => onClickTrack?.(resource.id)}
       className="group block w-full overflow-hidden rounded-xl border border-border bg-card text-left transition-all hover:border-accent/30 hover:bg-card-hover"
     >
-      {/* OG image banner */}
-      <OgImageBanner url={resource.url} />
-
       <div className="p-4">
         {/* Org header: logo + name, time pill */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -108,48 +102,5 @@ export function ResourceCard({
         )}
       </div>
     </a>
-  );
-}
-
-// ─── OG Image Banner ────────────────────────────────────────
-
-function OgImageBanner({ url }: { url: string }) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchOgImage() {
-      try {
-        const res = await fetch(`/api/og-image?url=${encodeURIComponent(url)}`);
-        if (!res.ok) { setFailed(true); return; }
-        const data = await res.json();
-        if (!cancelled && data.image) {
-          setImageUrl(data.image);
-        } else {
-          setFailed(true);
-        }
-      } catch {
-        if (!cancelled) setFailed(true);
-      }
-    }
-
-    fetchOgImage();
-    return () => { cancelled = true; };
-  }, [url]);
-
-  if (failed || !imageUrl) return null;
-
-  return (
-    <div className="h-36 w-full overflow-hidden bg-card-hover">
-      <img
-        src={imageUrl}
-        alt=""
-        loading="lazy"
-        onError={() => setFailed(true)}
-        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-      />
-    </div>
   );
 }

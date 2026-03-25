@@ -84,8 +84,7 @@ For resources:
 {
   "resourceId": "the-resource-id",
   "rank": 1,
-  "description": "A personalized 1-2 sentence description.",
-  "matchReason": "Leverages your ML skills",
+  "description": "A single punchy sentence, max 20 words.",
   "title": "Optional custom title"
 }
 
@@ -93,22 +92,22 @@ For a guide (optional, at most 1):
 {
   "guideId": "the-guide-id",
   "rank": 3,
-  "description": "A personalized 1-2 sentence description of why talking to this guide would help."
+  "description": "A single punchy sentence about why this guide is relevant."
 }
 
 ### description
-Write a personalized description (1 sentence, sometimes 2) that is heavily inspired by the resource's existing description but rewritten to speak directly to this person. Weave in specific details from their profile - their job, skills, company, background - to make it feel personal. For example, instead of "A research program for aspiring alignment researchers", write "A 10-week research sprint where your ML engineering experience at DeepMind would be a huge asset." The description should make the person feel like this resource was hand-picked for them.
+Write a SHORT personalized description: 1 sentence only, max 20 words. It must explain both what the resource is AND why it's relevant to this person, in a single punchy sentence. Bake the "why this is for you" directly into the description.
 
-For guides, write something like "Sarah transitioned from software engineering to alignment research two years ago and mentors people making the same switch. Your ML background at Google makes you exactly who she's looking to help."
+Good examples:
+- "A 10-week research sprint where your ML engineering skills would be a huge asset."
+- "The go-to career board for AI safety roles that match your policy background."
+- "A hands-on alignment course designed for engineers at your experience level."
 
-### matchReason (required for resources)
-A punchy 3-6 word phrase explaining WHY this resource matches this person. This is displayed as a highlighted tag above the description. It should feel like a quick "aha" moment. Examples:
-- "Leverages your ML skills"
-- "Perfect for policy professionals"
-- "Near you in San Francisco"
-- "Matches your research background"
-- "Great for your experience level"
-Never start with "Because" or "Since". Be direct. Reference their specific skills, role, location, or background when possible.
+Bad examples (too long, too generic):
+- "This is a comprehensive program that covers many aspects of AI safety research and would be a great fit for someone with your background in machine learning and software engineering at Google."
+- "A research program for aspiring alignment researchers."
+
+For guides, keep it to 1 sentence too: "Sarah mentors engineers making the switch to alignment research, exactly the transition you're exploring."
 
 ### title (optional, resources only)
 Only include a "title" field if you think a custom title would be more compelling for this specific user than the existing one. Otherwise, omit "title" entirely and the existing title will be used.
