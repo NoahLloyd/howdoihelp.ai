@@ -25,7 +25,10 @@ import { LocationPicker } from "@/components/results/location-picker";
 
 // ─── Path definitions ─────────────────────────────────────────
 
-type PathId = "quick" | "learn" | "connect" | "act" | "career";
+type PathId = "act" | "learn" | "connect";
+
+/** Sub-categories within "Take action" */
+type ActionSubId = "quick" | "involved" | "career";
 
 interface PathDef {
   id: PathId;
@@ -34,18 +37,17 @@ interface PathDef {
 }
 
 const PATHS: PathDef[] = [
-  { id: "quick", label: "2-minute actions", description: "Things you can do right now." },
+  { id: "act", label: "Take action", description: "Make a difference on AI safety." },
   { id: "learn", label: "Learn", description: "Understand AI safety better." },
   { id: "connect", label: "Connect", description: "Find your people." },
-  { id: "act", label: "Take action", description: "Make your voice heard." },
-  { id: "career", label: "Build a career", description: "Go deep on AI safety." },
 ];
 
 // ─── Resource → Path mapping ──────────────────────────────────
 
+/** Maps "other"-category resources to a top-level path */
 const OTHER_PATH_MAP: Record<string, PathId> = {
-  "aisafety-chatbot": "quick",
-  "fli-asset-pack": "quick",
+  "aisafety-chatbot": "act",
+  "fli-asset-pack": "act",
   "aisafety-media": "learn",
   "aisafety-field-map": "learn",
   "80k-explore-careers": "learn",
@@ -60,6 +62,20 @@ const OTHER_PATH_MAP: Record<string, PathId> = {
   "tabling": "act",
   "create-content": "act",
   "donation-guide": "act",
+  "80k-ai-safety": "act",
+  "80k-job-board": "act",
+  "volunteer-projects": "act",
+  "mentor-others": "act",
+};
+
+/** Maps "other"-category resources to an action sub-category */
+const ACTION_SUB_MAP: Record<string, ActionSubId> = {
+  "aisafety-chatbot": "quick",
+  "fli-asset-pack": "quick",
+  "controlai-legislators": "involved",
+  "tabling": "involved",
+  "create-content": "involved",
+  "donation-guide": "involved",
   "80k-ai-safety": "career",
   "80k-job-board": "career",
   "volunteer-projects": "career",
@@ -68,13 +84,18 @@ const OTHER_PATH_MAP: Record<string, PathId> = {
 
 function assignPath(resource: Resource): PathId {
   switch (resource.category) {
-    case "letters": return "quick";
+    case "letters": return "act";
     case "communities":
     case "events": return "connect";
     case "programs": return "learn";
     case "other": return OTHER_PATH_MAP[resource.id] ?? "act";
     default: return "act";
   }
+}
+
+function assignActionSub(resource: Resource): ActionSubId {
+  if (resource.category === "letters") return "quick";
+  return ACTION_SUB_MAP[resource.id] ?? "involved";
 }
 
 function sortByImpact(a: Resource, b: Resource): number {
@@ -182,7 +203,7 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
   const [allResources, setAllResources] = useState<Resource[]>([]);
   const [geo, setGeo] = useState<GeoData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activePath, setActivePath] = useState<PathId>("quick");
+  const [activePath, setActivePath] = useState<PathId>("act");
 
   // Tracking refs
   const loadedAtRef = useRef<number>(0);
@@ -338,7 +359,13 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
             </p>
 
             <div className="mt-4">
-              {activePath === "connect" ? (
+              {activePath === "act" ? (
+                <ActionExplorer
+                  resources={grouped.get("act") ?? []}
+                  variant={variant}
+                  onClickTrack={handleResourceClick}
+                />
+              ) : activePath === "connect" ? (
                 <ConnectExplorer
                   resources={grouped.get("connect") ?? []}
                   variant={variant}
@@ -483,6 +510,119 @@ function ResourceList({
         </button>
       )}
     </>
+  );
+}
+
+// ─── Action Explorer (quick / get involved / career) ──────────
+
+const ACTION_TABS: { id: ActionSubId; label: string }[] = [
+  { id: "quick", label: "2-minute actions" },
+  { id: "involved", label: "Get involved" },
+  { id: "career", label: "Build a career" },
+];
+
+interface ActionExplorerProps {
+  resources: Resource[];
+  variant: Variant;
+  onClickTrack: (resourceId: string, position: number) => void;
+}
+
+function ActionExplorer({ resources, variant, onClickTrack }: ActionExplorerProps) {
+  const [search, setSearch] = useState("");
+
+  const quick = useMemo(
+    () => resources.filter((r) => assignActionSub(r) === "quick"),
+    [resources]
+  );
+  const involved = useMemo(
+    () => resources.filter((r) => assignActionSub(r) === "involved"),
+    [resources]
+  );
+  const career = useMemo(
+    () => resources.filter((r) => assignActionSub(r) === "career"),
+    [resources]
+  );
+
+  const defaultTab: ActionSubId = quick.length > 0 ? "quick" : involved.length > 0 ? "involved" : "career";
+  const [tab, setTab] = useState<ActionSubId>(defaultTab);
+
+  // Switch if current tab becomes empty
+  useEffect(() => {
+    const pool = tab === "quick" ? quick : tab === "involved" ? involved : career;
+    if (pool.length === 0) {
+      if (quick.length > 0) setTab("quick");
+      else if (involved.length > 0) setTab("involved");
+      else if (career.length > 0) setTab("career");
+    }
+  }, [tab, quick.length, involved.length, career.length, quick, involved, career]);
+
+  const visibleTabs = useMemo(() => {
+    const tabs: { id: ActionSubId; label: string }[] = [];
+    if (quick.length > 0) tabs.push(ACTION_TABS[0]);
+    if (involved.length > 0) tabs.push(ACTION_TABS[1]);
+    if (career.length > 0) tabs.push(ACTION_TABS[2]);
+    return tabs;
+  }, [quick.length, involved.length, career.length]);
+
+  const pool = tab === "quick" ? quick : tab === "involved" ? involved : career;
+
+  const filtered = useMemo(() => {
+    let items = pool;
+    if (search) {
+      items = items.filter((r) => matchesSearch(r, search));
+    }
+    return [...items].sort(sortByImpact);
+  }, [pool, search]);
+
+  const tabCounts: Record<ActionSubId, number> = {
+    quick: quick.length,
+    involved: involved.length,
+    career: career.length,
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {visibleTabs.length > 1 && (
+        <div className="flex border-b border-border">
+          {visibleTabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => { setTab(t.id); setSearch(""); }}
+              className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
+                tab === t.id
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.label}
+              <span className={`ml-1.5 text-xs ${tab === t.id ? "text-muted-foreground" : "text-muted"}`}>
+                {tabCounts[t.id]}
+              </span>
+              {tab === t.id && (
+                <motion.div
+                  layoutId="action-tab-indicator"
+                  className="absolute inset-x-0 -bottom-px h-0.5 bg-accent"
+                  transition={{ duration: 0.2 }}
+                />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder={`Search ${tab === "quick" ? "quick actions" : tab === "career" ? "career resources" : "resources"}...`}
+      />
+
+      <ResourceList
+        resources={filtered}
+        variant={variant}
+        onClickTrack={onClickTrack}
+        highlightFirst={!search}
+      />
+    </div>
   );
 }
 
