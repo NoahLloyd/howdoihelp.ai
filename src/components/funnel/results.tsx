@@ -381,16 +381,40 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo, on
           </h1>
         </motion.div>
 
-        {/* All Recommendations — ranked equally */}
+        {/* Primary Recommendation */}
         {items.length > 0 && (
           <motion.div
             className="mt-8"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.5 }}
           >
+            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-accent">
+              Your #1 recommendation
+            </p>
+            <ResultItemRenderer
+              item={items[0]}
+              variant={variant}
+              geo={localGeo}
+              onClickTrack={(id) => handleResourceClick(id, 0)}
+              onLocationChange={handleLocationChange}
+            />
+          </motion.div>
+        )}
+
+        {/* Secondary Recommendations */}
+        {items.length > 1 && (
+          <motion.div
+            className="mt-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5, duration: 0.5 }}
+          >
+            <p className="mb-3 text-sm text-muted-foreground">
+              Also check out
+            </p>
             <div className="flex flex-col gap-3">
-              {items.map((item, i) => {
+              {items.slice(1).map((item, i) => {
                 const key =
                   item.kind === "resource"
                     ? item.scored.resource.id
@@ -402,13 +426,13 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo, on
                     key={key}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 + i * 0.1 }}
+                    transition={{ delay: 0.6 + i * 0.1 }}
                   >
                     <ResultItemRenderer
                       item={item}
                       variant={variant}
                       geo={localGeo}
-                      onClickTrack={(id) => handleResourceClick(id, i)}
+                      onClickTrack={(id) => handleResourceClick(id, i + 1)}
                       onLocationChange={handleLocationChange}
                     />
                   </motion.div>
@@ -448,7 +472,6 @@ interface ResultItemRendererProps {
   item: ResultItem;
   variant: Variant;
   geo: GeoData | null;
-  isPrimary?: boolean;
   onClickTrack: (resourceId: string) => void;
   onLocationChange: (geo: GeoData) => void;
 }
@@ -457,7 +480,6 @@ function ResultItemRenderer({
   item,
   variant,
   geo,
-  isPrimary,
   onClickTrack,
   onLocationChange,
 }: ResultItemRendererProps) {
@@ -475,10 +497,7 @@ function ResultItemRenderer({
 
   if (item.kind === "guide") {
     return (
-      <GuideCard
-        recommendation={item.recommendation}
-        isPrimary={isPrimary}
-      />
+      <GuideCard recommendation={item.recommendation} />
     );
   }
 
@@ -486,7 +505,6 @@ function ResultItemRenderer({
     <ResourceCard
       scored={item.scored}
       variant={variant}
-      isPrimary={isPrimary}
       customDescription={item.customDescription}
       matchReason={item.matchReason}
       onClickTrack={(id) => onClickTrack(id)}
@@ -569,16 +587,16 @@ function LocalCardGroup({ card, variant, geo, onClickTrack, onLocationChange }: 
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded((v) => !v); } }}
             className="relative z-10 mt-1 flex w-full cursor-pointer items-center justify-between rounded-b-xl border border-t-0 border-border bg-card/80 px-4 py-2.5 text-left transition-colors hover:bg-card-hover"
           >
-            <span className="text-xs text-muted-foreground">
-              {extras.length} more {label}
-              {geo && (
-                <> near<LocationPicker geo={geo} onLocationChange={onLocationChange} /></>
-              )}
+            <span className="min-w-0 overflow-hidden whitespace-nowrap text-xs text-muted-foreground">
+              {extras.length} more{" "}
+              <span className="hidden sm:inline">{label} </span>
+              <span className="hidden min-[360px]:inline sm:hidden">{card.anchor.resource.category === "communities" ? "communities" : card.anchor.resource.category === "events" ? "events" : label}{" "}</span>
+              {geo && <>near<LocationPicker geo={geo} onLocationChange={onLocationChange} /></>}
             </span>
             <motion.span
               animate={{ rotate: expanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}
-              className="text-muted-foreground text-xs"
+              className="shrink-0 text-muted-foreground text-xs ml-2"
             >
               ↓
             </motion.span>
