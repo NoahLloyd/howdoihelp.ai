@@ -197,9 +197,10 @@ function applySortToResources(resources: Resource[], sort: SortId): Resource[] {
 
 interface BrowseResultsProps {
   variant: Variant;
+  headerContent?: React.ReactNode;
 }
 
-export function BrowseResults({ variant }: BrowseResultsProps) {
+export function BrowseResults({ variant, headerContent }: BrowseResultsProps) {
   const [allResources, setAllResources] = useState<Resource[]>([]);
   const [geo, setGeo] = useState<GeoData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -303,9 +304,11 @@ export function BrowseResults({ variant }: BrowseResultsProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Ways you can help with AI safety
-          </h1>
+          {headerContent || (
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              Ways you can help with AI safety
+            </h1>
+          )}
         </motion.div>
 
         {/* Path pills */}
