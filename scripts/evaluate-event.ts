@@ -28,16 +28,23 @@ import { preFilter } from './lib/pre-filter';
 import { estimateEventMinutes } from './lib/estimate-time';
 import { getActivePrompt, interpolateTemplate } from '../src/lib/prompts';
 
-// ─── Config ────────────────────────────────────────────────
+// ─── Config (lazy init for serverless compatibility) ────────
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-if (!ANTHROPIC_API_KEY) {
-  console.error('❌ Missing ANTHROPIC_API_KEY in .env.local');
-  process.exit(1);
+let _anthropic: Anthropic | null = null;
+function getAnthropicClient(): Anthropic {
+  if (!_anthropic) {
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (!key) throw new Error('Missing ANTHROPIC_API_KEY');
+    _anthropic = new Anthropic({ apiKey: key });
+  }
+  return _anthropic;
 }
 
-const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-const supabase = getSupabase();
+let _supabase: ReturnType<typeof getSupabase> | null = null;
+function getDb() {
+  if (!_supabase) _supabase = getSupabase();
+  return _supabase;
+}
 
 // Thresholds for auto-promote / auto-reject
 const AUTO_PROMOTE_THRESHOLD = 0.6;
@@ -84,7 +91,8 @@ async function evaluateWithAI(
     location?: string;
     source?: string;
   },
-  existingEvents: ExistingEvent[] = []
+  existingEvents: ExistingEvent[] = [],
+  modelOverride?: string,
 ): Promise<AIEvaluation> {
   // Build template variables
   const scrapedTextVar = `Evaluate this event candidate:
@@ -120,8 +128,11 @@ ${lines.join('\n')}
     existing_events: existingEventsVar,
   });
 
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+  const model = modelOverride || activePrompt.model || 'claude-haiku-4-5-20251001';
+  console.log(`  Using model: ${model}`);
+
+  const response = await getAnthropicClient().messages.create({
+    model,
     max_tokens: 1024,
     messages: [
       { role: 'user', content: fullPrompt },
@@ -173,7 +184,7 @@ async function fetchExistingEvents(): Promise<ExistingEvent[]> {
   const events: ExistingEvent[] = [];
 
   // Fetch live resources (promoted events)
-  const { data: resources } = await supabase
+  const { data: resources } = await getDb()
     .from('resources')
     .select('id, title, event_date, location, source_org, url')
     .eq('category', 'events')
@@ -191,7 +202,7 @@ async function fetchExistingEvents(): Promise<ExistingEvent[]> {
   }
 
   // Fetch already-evaluated/promoted candidates (not yet in resources, or recently processed)
-  const { data: candidates } = await supabase
+  const { data: candidates } = await getDb()
     .from('event_candidates')
     .select('id, title, event_date, location, ai_organization, url')
     .in('status', ['promoted', 'evaluated'])
@@ -215,9 +226,9 @@ async function fetchExistingEvents(): Promise<ExistingEvent[]> {
 
 // ─── Candidate Processing ──────────────────────────────────
 
-async function evaluateCandidate(candidateId: string, force = false, existingEvents?: ExistingEvent[]): Promise<'promoted' | 'rejected' | 'evaluated' | 'skipped' | 'error'> {
+async function evaluateCandidate(candidateId: string, force = false, existingEvents?: ExistingEvent[], modelOverride?: string): Promise<'promoted' | 'rejected' | 'evaluated' | 'skipped' | 'error'> {
   // Fetch the candidate
-  const { data: candidate, error } = await supabase
+  const { data: candidate, error } = await getDb()
     .from('event_candidates')
     .select('*')
     .eq('id', candidateId)
@@ -249,7 +260,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingEve
     };
 
     // Save scraped text so we don't re-scrape
-    await supabase
+    await getDb()
       .from('event_candidates')
       .update({ scraped_text: scrapedText })
       .eq('id', candidateId);
@@ -274,7 +285,8 @@ async function evaluateCandidate(candidateId: string, force = false, existingEve
       candidate.url,
       scrapedText,
       { ...scrapedMeta, source: candidate.source },
-      existingEvents
+      existingEvents,
+      modelOverride,
     );
   } catch (err: any) {
     console.error(`  AI evaluation failed for "${candidate.title}":`, err.message);
@@ -282,7 +294,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingEve
   }
 
   // Step 4: Store AI results - always use AI's standardized date/location
-  await supabase
+  await getDb()
     .from('event_candidates')
     .update({
       ai_is_real_event: evaluation.is_real_event,
@@ -310,7 +322,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingEve
 
   // Check for duplicate first
   if (evaluation.duplicate_of) {
-    await supabase
+    await getDb()
       .from('event_candidates')
       .update({ status: 'rejected', ai_reasoning: `Duplicate of ${evaluation.duplicate_of}. ${evaluation.reasoning}` })
       .eq('id', candidateId);
@@ -319,7 +331,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingEve
   }
 
   if (!evaluation.is_real_event || !evaluation.is_relevant || evaluation.relevance_score < AUTO_REJECT_THRESHOLD) {
-    await supabase
+    await getDb()
       .from('event_candidates')
       .update({ status: 'rejected' })
       .eq('id', candidateId);
@@ -338,7 +350,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingEve
   }
 
   // Borderline - needs admin review
-  await supabase
+  await getDb()
     .from('event_candidates')
     .update({ status: 'evaluated' })
     .eq('id', candidateId);
@@ -357,7 +369,7 @@ async function promoteToResources(
   const PROGRAM_EVENT_TYPES = ['fellowship', 'course', 'program'];
   const category = PROGRAM_EVENT_TYPES.includes(evaluation.event_type) ? 'programs' : 'events';
 
-  const { error } = await supabase.from('resources').insert({
+  const { error } = await getDb().from('resources').insert({
     id: resourceId,
     title: evaluation.clean_title,
     description: evaluation.clean_description,
@@ -392,7 +404,7 @@ async function promoteToResources(
   }
 
   // Mark candidate as promoted
-  await supabase
+  await getDb()
     .from('event_candidates')
     .update({
       status: 'promoted',
@@ -406,10 +418,10 @@ async function promoteToResources(
 
 // ─── CLI Modes ─────────────────────────────────────────────
 
-async function processQueue(force = false) {
+async function processQueue(force = false, modelOverride?: string) {
   const statusFilter = force ? ['pending', 'evaluated', 'rejected'] : ['pending'];
 
-  const { data: candidates, error } = await supabase
+  const { data: candidates, error } = await getDb()
     .from('event_candidates')
     .select('id')
     .in('status', statusFilter)
@@ -426,7 +438,7 @@ async function processQueue(force = false) {
   }
 
   // Fetch full candidate data for pre-filtering
-  const { data: fullCandidates } = await supabase
+  const { data: fullCandidates } = await getDb()
     .from('event_candidates')
     .select('id, title, description, source_org, url')
     .in('id', candidates.map(c => c.id));
@@ -447,7 +459,7 @@ async function processQueue(force = false) {
   // Auto-reject pre-filtered candidates in the database
   let prefilteredCount = 0;
   for (const r of prefiltered) {
-    await supabase
+    await getDb()
       .from('event_candidates')
       .update({ status: 'rejected', ai_reasoning: `Pre-filter: ${r.reason}` })
       .eq('id', r.event.source_id);
@@ -468,12 +480,12 @@ async function processQueue(force = false) {
   const counts = { promoted: 0, rejected: 0, evaluated: 0, skipped: 0, error: 0 };
 
   for (const c of toEvaluate) {
-    const result = await evaluateCandidate(c.id, force, existingEvents);
+    const result = await evaluateCandidate(c.id, force, existingEvents, modelOverride);
     counts[result]++;
 
     // After promotion, add to existingEvents so later candidates can dedup against it
     if (result === 'promoted') {
-      const { data: promoted } = await supabase
+      const { data: promoted } = await getDb()
         .from('event_candidates')
         .select('id, title, event_date, location, ai_organization, url')
         .eq('id', c.id)
@@ -503,14 +515,14 @@ async function processQueue(force = false) {
   console.log(`   💥 Errors:       ${counts.error}`);
 }
 
-async function evaluateSingleUrl(url: string) {
+async function evaluateSingleUrl(url: string, modelOverride?: string) {
   console.log(`🔍 Evaluating URL: ${url}\n`);
 
   // Try to find an existing candidate with this URL first
   const hostname = new URL(url).hostname.replace(/^www\./, '');
   const pathname = new URL(url).pathname.replace(/\/+$/, '');
 
-  const { data: existing } = await supabase
+  const { data: existing } = await getDb()
     .from('event_candidates')
     .select('id, title, status')
     .or(`url.ilike.%${hostname}${pathname}%,url.ilike.%${hostname}${pathname}`)
@@ -519,7 +531,7 @@ async function evaluateSingleUrl(url: string) {
   if (existing?.[0]) {
     console.log(`Found existing candidate: "${existing[0].title}" (status: ${existing[0].status})`);
     console.log('Re-evaluating...\n');
-    const outcome = await evaluateCandidate(existing[0].id, true);
+    const outcome = await evaluateCandidate(existing[0].id, true, undefined, modelOverride);
     console.log(`\nResult: ${outcome}`);
     return;
   }
@@ -528,7 +540,7 @@ async function evaluateSingleUrl(url: string) {
   console.log('No existing candidate found. Creating new entry...\n');
 
   const candidateId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const { error } = await supabase.from('event_candidates').insert({
+  const { error } = await getDb().from('event_candidates').insert({
     id: candidateId,
     title: 'Unknown (pending scrape)',
     url,
@@ -542,7 +554,7 @@ async function evaluateSingleUrl(url: string) {
     return;
   }
 
-  const outcome = await evaluateCandidate(candidateId, true);
+  const outcome = await evaluateCandidate(candidateId, true, undefined, modelOverride);
   console.log(`\nResult: ${outcome}`);
 }
 
@@ -563,7 +575,7 @@ async function evaluateSingleDescription(title: string, description?: string, da
     return;
   }
 
-  const { data: recent } = await supabase
+  const { data: recent } = await getDb()
     .from('event_candidates')
     .select('id')
     .eq('source', 'manual')
@@ -576,46 +588,40 @@ async function evaluateSingleDescription(title: string, description?: string, da
   }
 }
 
-// ─── Main ──────────────────────────────────────────────────
+// ─── Exported run function ───────────────────────────────────
 
-async function main() {
-  const args = process.argv.slice(2);
-
-  if (args.includes('--process-queue')) {
-    const force = args.includes('--force');
-    await processQueue(force);
-  } else if (args.includes('--url')) {
-    const urlIdx = args.indexOf('--url');
-    const url = args[urlIdx + 1];
-    if (!url) {
-      console.error('Usage: --url <URL>');
-      process.exit(1);
-    }
-    await evaluateSingleUrl(url);
-  } else if (args.includes('--title')) {
-    const titleIdx = args.indexOf('--title');
-    const title = args[titleIdx + 1];
-    const descIdx = args.indexOf('--description');
-    const description = descIdx >= 0 ? args[descIdx + 1] : undefined;
-    const dateIdx = args.indexOf('--date');
-    const date = dateIdx >= 0 ? args[dateIdx + 1] : undefined;
-    if (!title) {
-      console.error('Usage: --title <title> [--description <desc>] [--date <YYYY-MM-DD>]');
-      process.exit(1);
-    }
-    await evaluateSingleDescription(title, description, date);
+export async function run(opts: { processQueue?: boolean; force?: boolean; url?: string; title?: string; description?: string; date?: string; model?: string } = {}) {
+  if (opts.processQueue) {
+    await processQueue(opts.force || false, opts.model);
+  } else if (opts.url) {
+    await evaluateSingleUrl(opts.url, opts.model);
+  } else if (opts.title) {
+    await evaluateSingleDescription(opts.title, opts.description, opts.date);
   } else {
-    console.log(`Event Evaluator - The AI gatekeeper for howdoihelp.ai
-
-Usage:
-  npx tsx scripts/evaluate-event.ts --url <URL>
-  npx tsx scripts/evaluate-event.ts --title <title> [--description <desc>] [--date <YYYY-MM-DD>]
-  npx tsx scripts/evaluate-event.ts --process-queue [--force]
-    `);
+    console.log('Event Evaluator: no action specified');
   }
 }
 
-main().catch(err => {
-  console.error('💥 Fatal:', err);
-  process.exit(1);
-});
+// CLI entrypoint
+if (process.argv[1]?.includes('/scripts/')) {
+  const args = process.argv.slice(2);
+  const opts: Parameters<typeof run>[0] = {};
+
+  if (args.includes('--process-queue')) {
+    opts.processQueue = true;
+    opts.force = args.includes('--force');
+  } else if (args.includes('--url')) {
+    opts.url = args[args.indexOf('--url') + 1];
+  } else if (args.includes('--title')) {
+    opts.title = args[args.indexOf('--title') + 1];
+    const descIdx = args.indexOf('--description');
+    if (descIdx >= 0) opts.description = args[descIdx + 1];
+    const dateIdx = args.indexOf('--date');
+    if (dateIdx >= 0) opts.date = args[dateIdx + 1];
+  }
+
+  run(opts).catch(err => {
+    console.error('💥 Fatal:', err);
+    process.exit(1);
+  });
+}

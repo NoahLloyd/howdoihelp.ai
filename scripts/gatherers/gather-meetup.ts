@@ -23,41 +23,6 @@ const SEARCH_QUERIES = [
   'machine learning safety',
 ];
 
-const MEETUP_GQL_URL = 'https://www.meetup.com/gql';
-
-const SEARCH_QUERY = `
-query($query: String!, $first: Int) {
-  keywordSearch(input: { query: $query, first: $first, source: EVENTS }) {
-    edges {
-      node {
-        id
-        result {
-          ... on Event {
-            id
-            title
-            description
-            eventUrl
-            dateTime
-            endTime
-            venue {
-              name
-              city
-              state
-              country
-            }
-            isOnline
-            group {
-              name
-              urlname
-            }
-          }
-        }
-      }
-    }
-  }
-}
-`;
-
 interface MeetupEvent {
   id: string;
   title: string;
@@ -78,45 +43,9 @@ interface MeetupEvent {
   };
 }
 
+// Meetup's public GQL endpoint (/gql) is dead (404 since early 2026).
+// We scrape the search results page instead, which embeds Apollo state as __NEXT_DATA__.
 async function searchMeetup(query: string): Promise<MeetupEvent[]> {
-  try {
-    const res = await fetch(MEETUP_GQL_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        query: SEARCH_QUERY,
-        variables: { query, first: 30 },
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
-
-    if (!res.ok) {
-      console.error(`  Meetup API returned ${res.status} for "${query}"`);
-      return await scrapeMeetupSearch(query);
-    }
-
-    const json = await res.json();
-
-    if (json.errors) {
-      console.error(`  Meetup GQL errors for "${query}":`, json.errors[0]?.message);
-      return await scrapeMeetupSearch(query);
-    }
-
-    const edges = json.data?.keywordSearch?.edges || [];
-    return edges
-      .map((edge: any) => edge.node?.result)
-      .filter((e: any) => e && e.title && e.eventUrl);
-  } catch (err: any) {
-    console.error(`  Meetup search failed for "${query}": ${err.message}`);
-    return await scrapeMeetupSearch(query);
-  }
-}
-
-async function scrapeMeetupSearch(query: string): Promise<MeetupEvent[]> {
   try {
     const url = `https://www.meetup.com/find/?keywords=${encodeURIComponent(query)}&source=EVENTS`;
     const res = await fetch(url, {
@@ -280,14 +209,12 @@ export async function gather(): Promise<GatheredEvent[]> {
   return Array.from(allEvents.values());
 }
 
-// CLI entrypoint
-async function main() {
-  const dryRun = process.argv.includes('--dry-run');
+export async function run(opts: { dryRun?: boolean } = {}) {
+  const { dryRun = false } = opts;
   console.log(`📡 Meetup.com Event Gatherer${dryRun ? ' (DRY RUN)' : ''}\n`);
   const events = await gather();
   console.log(`\n  ${events.length} unique events found.`);
 
-  // Pre-filter obvious junk
   const { kept, rejected } = preFilter(events);
   if (rejected.length > 0) {
     console.log(`\n🚫 Pre-filter rejected ${rejected.length} irrelevant events:`);
@@ -309,7 +236,9 @@ async function main() {
   console.log(`\n✅ Done: ${result.inserted} new candidates, ${result.skipped} skipped, ${result.errors} errors.`);
 }
 
-main().catch((err) => {
-  console.error('💥 Fatal:', err);
-  process.exit(1);
-});
+if (process.argv[1]?.includes('/scripts/')) {
+  run({ dryRun: process.argv.includes('--dry-run') }).catch((err) => {
+    console.error('💥 Fatal:', err);
+    process.exit(1);
+  });
+}

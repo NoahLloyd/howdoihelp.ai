@@ -13,44 +13,11 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
-import { spawn } from 'child_process';
+import { run as runSyncCommunities } from './sync-communities';
+import { run as runEvaluateCommunity } from './evaluate-community';
 
-const args = process.argv.slice(2);
-const skipGather = args.includes('--skip-gather');
-const skipEvaluate = args.includes('--skip-evaluate');
-
-function runScript(scriptPath: string, extraArgs: string[] = []): Promise<{ success: boolean; output: string }> {
-  return new Promise((resolve) => {
-    let output = '';
-    const child = spawn('npx', ['tsx', scriptPath, ...extraArgs], {
-      cwd: process.cwd(),
-      shell: true,
-      env: process.env,
-    });
-
-    child.stdout?.on('data', (data) => {
-      const str = data.toString();
-      output += str;
-      process.stdout.write(str);
-    });
-
-    child.stderr?.on('data', (data) => {
-      const str = data.toString();
-      output += str;
-      process.stderr.write(str);
-    });
-
-    child.on('close', (code) => {
-      resolve({ success: code === 0, output });
-    });
-
-    child.on('error', (err) => {
-      resolve({ success: false, output: err.message });
-    });
-  });
-}
-
-async function main() {
+export async function run(opts: { skipGather?: boolean; skipEvaluate?: boolean } = {}) {
+  const { skipGather = false, skipEvaluate = false } = opts;
   const startTime = Date.now();
   console.log('='.repeat(60));
   console.log('  COMMUNITY PIPELINE - howdoihelp.ai');
@@ -62,9 +29,10 @@ async function main() {
     console.log('\n\n--- PHASE 1: GATHERING ---\n');
     console.log('Running community sync (EA Forum, LessWrong, PauseAI, AISafety.com)...\n');
 
-    const result = await runScript('scripts/sync-communities.ts');
-    if (!result.success) {
-      console.error('\n  WARNING: Community sync had errors. Continuing...\n');
+    try {
+      await runSyncCommunities();
+    } catch (err: any) {
+      console.error(`\n  WARNING: Community sync had errors: ${err.message}. Continuing...\n`);
     }
   } else {
     console.log('\n  Skipping gather phase (--skip-gather)\n');
@@ -75,10 +43,10 @@ async function main() {
     console.log('\n\n--- PHASE 2: AI EVALUATION ---\n');
     console.log('Processing all pending community candidates through Claude...\n');
 
-    const evalResult = await runScript('scripts/evaluate-community.ts', ['--process-queue']);
-
-    if (!evalResult.success) {
-      console.error('\n  WARNING: Evaluation phase had errors.\n');
+    try {
+      await runEvaluateCommunity({ processQueue: true });
+    } catch (err: any) {
+      console.error(`\n  WARNING: Evaluation phase had errors: ${err.message}\n`);
     }
   } else {
     console.log('\n  Skipping evaluate phase (--skip-evaluate)\n');
@@ -90,7 +58,14 @@ async function main() {
   console.log('='.repeat(60));
 }
 
-main().catch((err) => {
-  console.error('Fatal:', err);
-  process.exit(1);
-});
+// CLI entrypoint
+if (process.argv[1]?.includes('/scripts/')) {
+  const args = process.argv.slice(2);
+  run({
+    skipGather: args.includes('--skip-gather'),
+    skipEvaluate: args.includes('--skip-evaluate'),
+  }).catch((err) => {
+    console.error('Fatal:', err);
+    process.exit(1);
+  });
+}
