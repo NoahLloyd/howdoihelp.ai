@@ -68,7 +68,27 @@ export interface AnalyticsData {
   questionDropoff: { question: string; answered: number; skipped: number }[];
 }
 
+export type AnalyticsResult =
+  | { success: true; data: AnalyticsData }
+  | { success: false; error: string };
+
 export async function getAnalyticsData(
+  dateRange: string = "30d"
+): Promise<AnalyticsResult> {
+  try {
+    return { success: true, data: await fetchAnalyticsData(dateRange) };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return {
+      success: false,
+      error: message.includes("POSTHOG_PERSONAL_API_KEY")
+        ? "Add your PostHog personal API key to .env.local as POSTHOG_PERSONAL_API_KEY to enable analytics."
+        : message,
+    };
+  }
+}
+
+async function fetchAnalyticsData(
   dateRange: string = "30d"
 ): Promise<AnalyticsData> {
   const slug = await getCreatorSlug();

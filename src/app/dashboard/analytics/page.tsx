@@ -29,7 +29,7 @@ import {
   Monitor,
   BarChart3,
 } from "lucide-react";
-import { getAnalyticsData, type AnalyticsData } from "./actions";
+import { getAnalyticsData, type AnalyticsData, type AnalyticsResult } from "./actions";
 
 const COLORS = [
   "#10b981",
@@ -58,7 +58,13 @@ export default function AnalyticsPage() {
     setLoading(true);
     setError(null);
     getAnalyticsData(dateRange)
-      .then(setData)
+      .then((result) => {
+        if (result.success) {
+          setData(result.data);
+        } else {
+          setError(result.error);
+        }
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [dateRange]);
@@ -79,9 +85,7 @@ export default function AnalyticsPage() {
           Analytics unavailable
         </h2>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
-          {error.includes("POSTHOG_PERSONAL_API_KEY")
-            ? "Add your PostHog personal API key to .env.local as POSTHOG_PERSONAL_API_KEY to enable analytics."
-            : error}
+          {error}
         </p>
       </div>
     );
