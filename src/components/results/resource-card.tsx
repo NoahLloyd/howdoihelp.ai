@@ -11,7 +11,10 @@ interface ResourceCardProps {
   variant: Variant;
   customTitle?: string;
   customDescription?: string;
+  customLocation?: string;
   matchReason?: string;
+  formatTimeFn?: (minutes: number) => string;
+  dateLocale?: string;
   onClickTrack?: (resourceId: string) => void;
 }
 
@@ -20,7 +23,10 @@ export function ResourceCard({
   variant,
   customTitle,
   customDescription,
+  customLocation,
   matchReason,
+  formatTimeFn,
+  dateLocale,
   onClickTrack,
 }: ResourceCardProps) {
   const { resource } = scored;
@@ -54,7 +60,7 @@ export function ResourceCard({
           <span className="font-medium">{displayName}</span>
           {resource.category !== "communities" && (
             <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-              {formatTime(resource.min_minutes)}
+              {(formatTimeFn || formatTime)(resource.min_minutes)}
             </span>
           )}
         </div>
@@ -84,7 +90,7 @@ export function ResourceCard({
               <span className="flex items-center gap-1">
                 <Calendar className="h-3 w-3 shrink-0" />
                 {deadlineDate ? "Deadline " : ""}
-                {displayDate.toLocaleDateString("en-US", {
+                {displayDate.toLocaleDateString(dateLocale || "en-US", {
                   weekday: "short",
                   month: "short",
                   day: "numeric",
@@ -95,7 +101,7 @@ export function ResourceCard({
             {showLocation && (
               <span className="flex items-center gap-1">
                 <MapPin className="h-3 w-3 shrink-0" />
-                {resource.location}
+                {customLocation || resource.location}
               </span>
             )}
           </div>
