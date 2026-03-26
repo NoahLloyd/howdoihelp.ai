@@ -1,26 +1,94 @@
 import { cookies } from "next/headers";
-import { spawn } from "child_process";
 
-const SCRIPT_MAP: Record<string, string> = {
-  // Event pipeline
-  "gather-aisafety": "scripts/gatherers/gather-aisafety.ts",
-  "gather-ea-lesswrong": "scripts/gatherers/gather-ea-lesswrong.ts",
-  "gather-eventbrite": "scripts/gatherers/gather-eventbrite.ts",
-  "gather-luma": "scripts/gatherers/gather-luma.ts",
-  "gather-meetup": "scripts/gatherers/gather-meetup.ts",
-  "evaluate": "scripts/evaluate-event.ts",
-  "sync-all": "scripts/sync-all-events.ts",
+// Gatherers
+import { run as runGatherAisafety } from "@scripts/gatherers/gather-aisafety";
+import { run as runGatherEaLesswrong } from "@scripts/gatherers/gather-ea-lesswrong";
+import { run as runGatherEventbrite } from "@scripts/gatherers/gather-eventbrite";
+import { run as runGatherLuma } from "@scripts/gatherers/gather-luma";
+import { run as runGatherMeetup } from "@scripts/gatherers/gather-meetup";
+import { run as runGatherBluedot } from "@scripts/gatherers/gather-bluedot";
+
+// Evaluators
+import { run as runEvaluateEvent } from "@scripts/evaluate-event";
+import { run as runEvaluateCommunity } from "@scripts/evaluate-community";
+
+// Orchestrators
+import { run as runSyncAll } from "@scripts/sync-all-events";
+import { run as runSyncCommunities } from "@scripts/sync-communities";
+import { run as runSyncAllCommunities } from "@scripts/sync-all-communities";
+import { run as runSyncPrograms } from "@scripts/sync-programs";
+
+type RunnerFn = (mode: string, searchParams: URLSearchParams) => Promise<void>;
+
+const RUNNERS: Record<string, RunnerFn> = {
+  // Event pipeline - gatherers
+  "gather-aisafety": async (mode) => {
+    await runGatherAisafety({ dryRun: mode === "dry-run" });
+  },
+  "gather-ea-lesswrong": async (mode) => {
+    await runGatherEaLesswrong({ dryRun: mode === "dry-run" });
+  },
+  "gather-eventbrite": async (mode) => {
+    await runGatherEventbrite({ dryRun: mode === "dry-run" });
+  },
+  "gather-luma": async (mode) => {
+    await runGatherLuma({ dryRun: mode === "dry-run" });
+  },
+  "gather-meetup": async (mode) => {
+    await runGatherMeetup({ dryRun: mode === "dry-run" });
+  },
+
+  // Event pipeline - evaluate
+  "evaluate": async (mode, searchParams) => {
+    const evalUrl = searchParams.get("url");
+    const model = searchParams.get("model") || undefined;
+    if (evalUrl) {
+      await runEvaluateEvent({ url: evalUrl, model });
+    } else {
+      await runEvaluateEvent({ processQueue: true, model });
+    }
+  },
+
+  // Event pipeline - full orchestrator
+  "sync-all": async (mode) => {
+    await runSyncAll({
+      skipEvaluate: mode === "dry-run",
+    });
+  },
+
   // Community pipeline
-  "sync-communities": "scripts/sync-communities.ts",
-  "evaluate-community": "scripts/evaluate-community.ts",
-  "sync-all-communities": "scripts/sync-all-communities.ts",
+  "sync-communities": async (mode) => {
+    await runSyncCommunities({ dryRun: mode === "dry-run" });
+  },
+  "evaluate-community": async (mode, searchParams) => {
+    const evalUrl = searchParams.get("url");
+    const model = searchParams.get("model") || undefined;
+    if (evalUrl) {
+      await runEvaluateCommunity({ url: evalUrl, model });
+    } else {
+      await runEvaluateCommunity({ processQueue: true, model });
+    }
+  },
+  "sync-all-communities": async (mode) => {
+    await runSyncAllCommunities({
+      skipEvaluate: mode === "dry-run",
+    });
+  },
+
   // Programs pipeline
-  "gather-bluedot": "scripts/gatherers/gather-bluedot.ts",
-  "gather-aisafety-programs": "scripts/gatherers/gather-aisafety.ts",
-  "sync-programs": "scripts/sync-programs.ts",
+  "gather-bluedot": async (mode) => {
+    await runGatherBluedot({ dryRun: mode === "dry-run" });
+  },
+  "gather-aisafety-programs": async (mode) => {
+    await runGatherAisafety({ dryRun: mode === "dry-run", programs: true });
+  },
+  "sync-programs": async (mode) => {
+    await runSyncPrograms({ dryRun: mode === "dry-run" });
+  },
 };
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function GET(req: Request) {
   // Auth check
@@ -34,55 +102,14 @@ export async function GET(req: Request) {
   const scriptId = searchParams.get("script");
   const mode = searchParams.get("mode") || "dry-run";
 
-  if (!scriptId || !SCRIPT_MAP[scriptId]) {
+  if (!scriptId || !RUNNERS[scriptId]) {
     return new Response("Invalid script parameter", { status: 400 });
   }
 
-  const scriptPath = SCRIPT_MAP[scriptId];
-  const args = ["tsx", scriptPath];
-
-  // AISafety programs gatherer needs the --programs flag
-  if (scriptId === "gather-aisafety-programs") {
-    args.push("--programs");
-  }
-
-  // For individual gatherers, add --dry-run in dry-run mode
-  if (mode === "dry-run" && scriptId !== "sync-all" && scriptId !== "evaluate" && scriptId !== "sync-all-communities" && scriptId !== "evaluate-community") {
-    args.push("--dry-run");
-  }
-  // For sync-all in dry-run mode, skip evaluate phase
-  if (mode === "dry-run" && scriptId === "sync-all") {
-    args.push("--skip-evaluate");
-  }
-  // For sync-all-communities in dry-run mode, skip evaluate phase
-  if (mode === "dry-run" && scriptId === "sync-all-communities") {
-    args.push("--skip-evaluate");
-  }
-  // For sync-communities gatherer, add --dry-run
-  if (mode === "dry-run" && scriptId === "sync-communities") {
-    args.push("--dry-run");
-  }
-  // Event evaluator: single URL or full queue
-  if (scriptId === "evaluate") {
-    const evalUrl = searchParams.get("url");
-    if (evalUrl) {
-      args.push("--url", evalUrl);
-    } else {
-      args.push("--process-queue");
-    }
-  }
-  // Community evaluator: single URL or full queue
-  if (scriptId === "evaluate-community") {
-    const evalUrl = searchParams.get("url");
-    if (evalUrl) {
-      args.push("--url", evalUrl);
-    } else {
-      args.push("--process-queue");
-    }
-  }
+  const runner = RUNNERS[scriptId];
 
   const stream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       const encoder = new TextEncoder();
 
       function send(event: string, data: string) {
@@ -90,7 +117,6 @@ export async function GET(req: Request) {
       }
 
       function sendLine(text: string) {
-        // SSE data fields can't have newlines, so split them
         const lines = text.split("\n");
         for (const line of lines) {
           if (line.length > 0) {
@@ -101,45 +127,32 @@ export async function GET(req: Request) {
 
       send("status", JSON.stringify({ state: "running", script: scriptId }));
 
-      const child = spawn("npx", args, {
-        cwd: process.cwd(),
-        shell: true,
-        env: {
-          ...process.env,
-          HOME: process.env.HOME || "/tmp",
-          npm_config_cache: "/tmp/.npm",
-        },
-      });
+      // Capture console output for SSE streaming
+      const origLog = console.log;
+      const origError = console.error;
 
-      child.stdout?.on("data", (chunk: Buffer) => {
-        sendLine(chunk.toString());
-      });
+      console.log = (...args: unknown[]) => {
+        const text = args.map((a) => (typeof a === "string" ? a : String(a))).join(" ");
+        sendLine(text);
+      };
 
-      child.stderr?.on("data", (chunk: Buffer) => {
-        const text = chunk.toString();
-        // Send stderr lines with a prefix so the client can color them
-        const lines = text.split("\n");
-        for (const line of lines) {
-          if (line.length > 0) {
-            send("stderr", line);
-          }
-        }
-      });
+      console.error = (...args: unknown[]) => {
+        const text = args.map((a) => (typeof a === "string" ? a : String(a))).join(" ");
+        send("stderr", text);
+      };
 
-      child.on("close", (code) => {
-        send("done", JSON.stringify({ code: code ?? 1 }));
+      try {
+        await runner(mode, searchParams);
+        send("done", JSON.stringify({ code: 0 }));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        send("error", JSON.stringify({ message }));
+        send("done", JSON.stringify({ code: 1 }));
+      } finally {
+        console.log = origLog;
+        console.error = origError;
         controller.close();
-      });
-
-      child.on("error", (err) => {
-        send("error", JSON.stringify({ message: err.message }));
-        controller.close();
-      });
-
-      // Handle client disconnect
-      req.signal.addEventListener("abort", () => {
-        child.kill("SIGTERM");
-      });
+      }
     },
   });
 

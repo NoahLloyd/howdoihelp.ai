@@ -23,16 +23,12 @@ import { insertCommunityCandidates, type GatheredCommunity } from "./lib/insert-
 
 // ─── Config ────────────────────────────────────────────────
 
-const DRY_RUN = process.argv.includes("--dry-run");
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("❌ Missing SUPABASE env vars - check .env.local");
-  process.exit(1);
+function getDb() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("Missing SUPABASE env vars");
+  return createClient(url, key);
 }
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -326,10 +322,10 @@ function deduplicateCommunities(all: CommunityEntry[]): CommunityEntry[] {
 
 // ─── Insert to community_candidates ─────────────────────────
 
-async function syncToDatabase(communities: CommunityEntry[]) {
+async function syncToDatabase(communities: CommunityEntry[], dryRun = false) {
   console.log(`\n📦 Inserting ${communities.length} communities into candidates table...`);
 
-  if (DRY_RUN) {
+  if (dryRun) {
     for (const comm of communities) {
       console.log(`   ➕ CANDIDATE: "${comm.title}" (${comm.source}) - ${comm.url}`);
     }
@@ -356,13 +352,13 @@ async function syncToDatabase(communities: CommunityEntry[]) {
   console.log(`   ${result.errors} errors`);
 }
 
-// ─── Main ──────────────────────────────────────────────────
+// ─── Exported run function ──────────────────────────────────
 
-async function main() {
-  console.log(`🔄 Community Sync - ${DRY_RUN ? "DRY RUN" : "LIVE"}`);
+export async function run(opts: { dryRun?: boolean } = {}) {
+  const { dryRun = false } = opts;
+  console.log(`🔄 Community Sync - ${dryRun ? "DRY RUN" : "LIVE"}`);
   console.log(`   ${new Date().toISOString()}\n`);
 
-  // Fetch from all sources in parallel
   const [eaGroups, lwGroups, pauseaiGroups, aisafetyGroups] = await Promise.all([
     fetchEAForumGroups().catch((err) => {
       console.error("❌ EA Forum fetch failed:", err.message);
@@ -394,10 +390,13 @@ async function main() {
 
   console.log(`   After dedup: ${deduped.length}`);
 
-  await syncToDatabase(deduped);
+  await syncToDatabase(deduped, dryRun);
 }
 
-main().catch((err) => {
-  console.error("💥 Fatal error:", err);
-  process.exit(1);
-});
+// CLI entrypoint
+if (process.argv[1]?.includes('/scripts/')) {
+  run({ dryRun: process.argv.includes("--dry-run") }).catch((err) => {
+    console.error("💥 Fatal error:", err);
+    process.exit(1);
+  });
+}

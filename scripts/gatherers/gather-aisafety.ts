@@ -268,10 +268,9 @@ export async function gatherPrograms(): Promise<GatheredProgram[]> {
   return programs;
 }
 
-// CLI entrypoint
-async function main() {
-  const dryRun = process.argv.includes('--dry-run');
-  const programsMode = process.argv.includes('--programs');
+// Exported run function for API route usage
+export async function run(opts: { dryRun?: boolean; programs?: boolean } = {}) {
+  const { dryRun = false, programs: programsMode = false } = opts;
 
   const modeLabel = programsMode ? 'Programs' : 'Events';
   console.log(`📡 AISafety.com Airtable Gatherer - ${modeLabel}${dryRun ? ' (DRY RUN)' : ''}\n`);
@@ -307,7 +306,12 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('💥 Fatal:', err);
-  process.exit(1);
-});
+// CLI entrypoint - only runs when executed directly via tsx
+if (process.argv[1]?.includes('/scripts/')) {
+  const dryRun = process.argv.includes('--dry-run');
+  const programs = process.argv.includes('--programs');
+  run({ dryRun, programs }).catch((err) => {
+    console.error('💥 Fatal:', err);
+    process.exit(1);
+  });
+}

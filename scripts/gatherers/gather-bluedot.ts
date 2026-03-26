@@ -205,9 +205,8 @@ export async function gather(): Promise<GatheredProgram[]> {
   return programs;
 }
 
-// CLI entrypoint
-async function main() {
-  const dryRun = process.argv.includes('--dry-run');
+export async function run(opts: { dryRun?: boolean } = {}) {
+  const { dryRun = false } = opts;
   console.log(`📡 BlueDot Impact Gatherer${dryRun ? ' (DRY RUN)' : ''}\n`);
 
   const programs = await gather();
@@ -225,7 +224,9 @@ async function main() {
   console.log(`\n✅ Done: ${result.inserted} new candidates, ${result.skipped} skipped, ${result.errors} errors.`);
 }
 
-main().catch((err) => {
-  console.error('💥 Fatal:', err);
-  process.exit(1);
-});
+if (process.argv[1]?.includes('/scripts/')) {
+  run({ dryRun: process.argv.includes('--dry-run') }).catch((err) => {
+    console.error('💥 Fatal:', err);
+    process.exit(1);
+  });
+}

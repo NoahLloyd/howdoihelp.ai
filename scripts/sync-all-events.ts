@@ -13,52 +13,23 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
-import { spawn } from 'child_process';
-
-const args = process.argv.slice(2);
-const skipGather = args.includes('--skip-gather');
-const skipEvaluate = args.includes('--skip-evaluate');
+import { run as runAisafety } from './gatherers/gather-aisafety';
+import { run as runEaLesswrong } from './gatherers/gather-ea-lesswrong';
+import { run as runEventbrite } from './gatherers/gather-eventbrite';
+import { run as runLuma } from './gatherers/gather-luma';
+import { run as runMeetup } from './gatherers/gather-meetup';
+import { run as runEvaluate } from './evaluate-event';
 
 const GATHERERS = [
-  { name: 'AISafety.com Airtable', script: 'scripts/gatherers/gather-aisafety.ts' },
-  { name: 'EA Forum + LessWrong', script: 'scripts/gatherers/gather-ea-lesswrong.ts' },
-  { name: 'Eventbrite', script: 'scripts/gatherers/gather-eventbrite.ts' },
-  { name: 'Luma', script: 'scripts/gatherers/gather-luma.ts' },
-  { name: 'Meetup.com', script: 'scripts/gatherers/gather-meetup.ts' },
+  { name: 'AISafety.com Airtable', run: runAisafety },
+  { name: 'EA Forum + LessWrong', run: runEaLesswrong },
+  { name: 'Eventbrite', run: runEventbrite },
+  { name: 'Luma', run: runLuma },
+  { name: 'Meetup.com', run: runMeetup },
 ];
 
-function runScript(scriptPath: string, extraArgs: string[] = []): Promise<{ success: boolean; output: string }> {
-  return new Promise((resolve) => {
-    let output = '';
-    const child = spawn('npx', ['tsx', scriptPath, ...extraArgs], {
-      cwd: process.cwd(),
-      shell: true,
-      env: process.env,
-    });
-
-    child.stdout?.on('data', (data) => {
-      const str = data.toString();
-      output += str;
-      process.stdout.write(str);
-    });
-
-    child.stderr?.on('data', (data) => {
-      const str = data.toString();
-      output += str;
-      process.stderr.write(str);
-    });
-
-    child.on('close', (code) => {
-      resolve({ success: code === 0, output });
-    });
-
-    child.on('error', (err) => {
-      resolve({ success: false, output: err.message });
-    });
-  });
-}
-
-async function main() {
+export async function run(opts: { skipGather?: boolean; skipEvaluate?: boolean } = {}) {
+  const { skipGather = false, skipEvaluate = false } = opts;
   const startTime = Date.now();
   console.log('='.repeat(60));
   console.log('  EVENT PIPELINE - howdoihelp.ai');
@@ -74,9 +45,10 @@ async function main() {
       console.log(`  Running: ${gatherer.name}`);
       console.log(`[${'='.repeat(40)}]\n`);
 
-      const result = await runScript(gatherer.script);
-      if (!result.success) {
-        console.error(`\n  WARNING: ${gatherer.name} gatherer failed. Continuing...\n`);
+      try {
+        await gatherer.run();
+      } catch (err: any) {
+        console.error(`\n  WARNING: ${gatherer.name} gatherer failed: ${err.message}. Continuing...\n`);
       }
     }
   } else {
@@ -88,10 +60,10 @@ async function main() {
     console.log('\n\n--- PHASE 2: AI EVALUATION ---\n');
     console.log('Processing all pending candidates through Claude...\n');
 
-    const evalResult = await runScript('scripts/evaluate-event.ts', ['--process-queue']);
-
-    if (!evalResult.success) {
-      console.error('\n  WARNING: Evaluation phase had errors.\n');
+    try {
+      await runEvaluate({ processQueue: true });
+    } catch (err: any) {
+      console.error(`\n  WARNING: Evaluation phase had errors: ${err.message}\n`);
     }
   } else {
     console.log('\n  Skipping evaluate phase (--skip-evaluate)\n');
@@ -103,7 +75,14 @@ async function main() {
   console.log('='.repeat(60));
 }
 
-main().catch((err) => {
-  console.error('Fatal:', err);
-  process.exit(1);
-});
+// CLI entrypoint
+if (process.argv[1]?.includes('/scripts/')) {
+  const args = process.argv.slice(2);
+  run({
+    skipGather: args.includes('--skip-gather'),
+    skipEvaluate: args.includes('--skip-evaluate'),
+  }).catch((err) => {
+    console.error('Fatal:', err);
+    process.exit(1);
+  });
+}

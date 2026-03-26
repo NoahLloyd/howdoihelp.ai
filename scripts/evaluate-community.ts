@@ -23,16 +23,23 @@ import { scrapeUrl } from './lib/scrape-url';
 import { getSupabase } from './lib/insert-candidates';
 import { getActivePrompt, interpolateTemplate } from '../src/lib/prompts';
 
-// ─── Config ────────────────────────────────────────────────
+// ─── Config (lazy init for serverless compatibility) ────────
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-if (!ANTHROPIC_API_KEY) {
-  console.error('❌ Missing ANTHROPIC_API_KEY in .env.local');
-  process.exit(1);
+let _anthropic: Anthropic | null = null;
+function getAnthropicClient(): Anthropic {
+  if (!_anthropic) {
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (!key) throw new Error('Missing ANTHROPIC_API_KEY');
+    _anthropic = new Anthropic({ apiKey: key });
+  }
+  return _anthropic;
 }
 
-const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-const supabase = getSupabase();
+let _supabase: ReturnType<typeof getSupabase> | null = null;
+function getDb() {
+  if (!_supabase) _supabase = getSupabase();
+  return _supabase;
+}
 
 // Thresholds for auto-promote / auto-reject
 const AUTO_PROMOTE_RELEVANCE = 0.5;
@@ -77,7 +84,8 @@ async function evaluateWithAI(
     source?: string;
     source_org?: string;
   },
-  existingCommunities: ExistingCommunity[] = []
+  existingCommunities: ExistingCommunity[] = [],
+  modelOverride?: string,
 ): Promise<AIEvaluation> {
   // Build template variables
   const scrapedTextVar = `Evaluate this community candidate:
@@ -113,8 +121,11 @@ ${lines.join('\n')}
     existing_communities: existingCommunitiesVar,
   });
 
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+  const model = modelOverride || activePrompt.model || 'claude-haiku-4-5-20251001';
+  console.log(`  Using model: ${model}`);
+
+  const response = await getAnthropicClient().messages.create({
+    model,
     max_tokens: 1024,
     messages: [
       { role: 'user', content: fullPrompt },
@@ -163,7 +174,7 @@ async function fetchExistingCommunities(): Promise<ExistingCommunity[]> {
   const communities: ExistingCommunity[] = [];
 
   // Fetch live resources (promoted communities)
-  const { data: resources } = await supabase
+  const { data: resources } = await getDb()
     .from('resources')
     .select('id, title, location, source_org, url')
     .eq('category', 'communities')
@@ -180,7 +191,7 @@ async function fetchExistingCommunities(): Promise<ExistingCommunity[]> {
   }
 
   // Fetch already-evaluated/promoted candidates
-  const { data: candidates } = await supabase
+  const { data: candidates } = await getDb()
     .from('community_candidates')
     .select('id, title, location, ai_organization, url')
     .in('status', ['promoted', 'evaluated'])
@@ -202,9 +213,9 @@ async function fetchExistingCommunities(): Promise<ExistingCommunity[]> {
 
 // ─── Candidate Processing ──────────────────────────────────
 
-async function evaluateCandidate(candidateId: string, force = false, existingCommunities?: ExistingCommunity[]): Promise<'promoted' | 'rejected' | 'evaluated' | 'skipped' | 'error'> {
+async function evaluateCandidate(candidateId: string, force = false, existingCommunities?: ExistingCommunity[], modelOverride?: string): Promise<'promoted' | 'rejected' | 'evaluated' | 'skipped' | 'error'> {
   // Fetch the candidate
-  const { data: candidate, error } = await supabase
+  const { data: candidate, error } = await getDb()
     .from('community_candidates')
     .select('*')
     .eq('id', candidateId)
@@ -230,7 +241,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingCom
     scrapedText = scraped.text;
 
     // Save scraped text so we don't re-scrape
-    await supabase
+    await getDb()
       .from('community_candidates')
       .update({ scraped_text: scrapedText })
       .eq('id', candidateId);
@@ -254,7 +265,8 @@ async function evaluateCandidate(candidateId: string, force = false, existingCom
         source: candidate.source,
         source_org: candidate.source_org,
       },
-      existingCommunities
+      existingCommunities,
+      modelOverride,
     );
   } catch (err: any) {
     console.error(`  AI evaluation failed for "${candidate.title}":`, err.message);
@@ -262,7 +274,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingCom
   }
 
   // Step 4: Store AI results
-  await supabase
+  await getDb()
     .from('community_candidates')
     .update({
       ai_is_real_community: evaluation.is_real_community,
@@ -288,7 +300,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingCom
 
   // Check for duplicate first
   if (evaluation.duplicate_of) {
-    await supabase
+    await getDb()
       .from('community_candidates')
       .update({ status: 'rejected', ai_reasoning: `Duplicate of ${evaluation.duplicate_of}. ${evaluation.reasoning}` })
       .eq('id', candidateId);
@@ -298,7 +310,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingCom
 
   if (!evaluation.is_real_community || !evaluation.is_relevant ||
       evaluation.relevance_score < AUTO_REJECT_RELEVANCE || evaluation.quality_score < AUTO_REJECT_QUALITY) {
-    await supabase
+    await getDb()
       .from('community_candidates')
       .update({ status: 'rejected' })
       .eq('id', candidateId);
@@ -318,7 +330,7 @@ async function evaluateCandidate(candidateId: string, force = false, existingCom
   }
 
   // Borderline - needs admin review
-  await supabase
+  await getDb()
     .from('community_candidates')
     .update({ status: 'evaluated' })
     .eq('id', candidateId);
@@ -333,7 +345,7 @@ async function promoteToResources(
 ): Promise<string | null> {
   const resourceId = `eval-comm-${candidate.source}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
-  const { error } = await supabase.from('resources').insert({
+  const { error } = await getDb().from('resources').insert({
     id: resourceId,
     title: evaluation.clean_title,
     description: evaluation.clean_description,
@@ -359,7 +371,7 @@ async function promoteToResources(
   }
 
   // Mark candidate as promoted
-  await supabase
+  await getDb()
     .from('community_candidates')
     .update({
       status: 'promoted',
@@ -373,10 +385,10 @@ async function promoteToResources(
 
 // ─── CLI Modes ─────────────────────────────────────────────
 
-async function processQueue(force = false) {
+async function processQueue(force = false, modelOverride?: string) {
   const statusFilter = force ? ['pending', 'evaluated', 'rejected'] : ['pending'];
 
-  const { data: candidates, error } = await supabase
+  const { data: candidates, error } = await getDb()
     .from('community_candidates')
     .select('id')
     .in('status', statusFilter)
@@ -401,12 +413,12 @@ async function processQueue(force = false) {
   const counts = { promoted: 0, rejected: 0, evaluated: 0, skipped: 0, error: 0 };
 
   for (const c of candidates) {
-    const result = await evaluateCandidate(c.id, force, existingCommunities);
+    const result = await evaluateCandidate(c.id, force, existingCommunities, modelOverride);
     counts[result]++;
 
     // After promotion, add to existingCommunities so later candidates can dedup against it
     if (result === 'promoted') {
-      const { data: promoted } = await supabase
+      const { data: promoted } = await getDb()
         .from('community_candidates')
         .select('id, title, location, ai_organization, url')
         .eq('id', c.id)
@@ -434,14 +446,14 @@ async function processQueue(force = false) {
   console.log(`   💥 Errors:       ${counts.error}`);
 }
 
-async function evaluateSingleUrl(url: string) {
+async function evaluateSingleUrl(url: string, modelOverride?: string) {
   console.log(`🔍 Evaluating URL: ${url}\n`);
 
   // Try to find an existing candidate with this URL first
   const hostname = new URL(url).hostname.replace(/^www\./, '');
   const pathname = new URL(url).pathname.replace(/\/+$/, '');
 
-  const { data: existing } = await supabase
+  const { data: existing } = await getDb()
     .from('community_candidates')
     .select('id, title, status')
     .or(`url.ilike.%${hostname}${pathname}%,url.ilike.%${hostname}${pathname}`)
@@ -450,7 +462,7 @@ async function evaluateSingleUrl(url: string) {
   if (existing?.[0]) {
     console.log(`Found existing candidate: "${existing[0].title}" (status: ${existing[0].status})`);
     console.log('Re-evaluating...\n');
-    const outcome = await evaluateCandidate(existing[0].id, true);
+    const outcome = await evaluateCandidate(existing[0].id, true, undefined, modelOverride);
     console.log(`\nResult: ${outcome}`);
     return;
   }
@@ -459,7 +471,7 @@ async function evaluateSingleUrl(url: string) {
   console.log('No existing candidate found. Creating new entry...\n');
 
   const candidateId = `manual-comm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const { error } = await supabase.from('community_candidates').insert({
+  const { error } = await getDb().from('community_candidates').insert({
     id: candidateId,
     title: 'Unknown (pending scrape)',
     url,
@@ -473,37 +485,36 @@ async function evaluateSingleUrl(url: string) {
     return;
   }
 
-  const outcome = await evaluateCandidate(candidateId, true);
+  const outcome = await evaluateCandidate(candidateId, true, undefined, modelOverride);
   console.log(`\nResult: ${outcome}`);
 }
 
-// ─── Main ──────────────────────────────────────────────────
+// ─── Exported run function ───────────────────────────────────
 
-async function main() {
-  const args = process.argv.slice(2);
-
-  if (args.includes('--process-queue')) {
-    const force = args.includes('--force');
-    await processQueue(force);
-  } else if (args.includes('--url')) {
-    const urlIdx = args.indexOf('--url');
-    const url = args[urlIdx + 1];
-    if (!url) {
-      console.error('Usage: --url <URL>');
-      process.exit(1);
-    }
-    await evaluateSingleUrl(url);
+export async function run(opts: { processQueue?: boolean; force?: boolean; url?: string; model?: string } = {}) {
+  if (opts.processQueue) {
+    await processQueue(opts.force || false, opts.model);
+  } else if (opts.url) {
+    await evaluateSingleUrl(opts.url, opts.model);
   } else {
-    console.log(`Community Evaluator - The AI gatekeeper for howdoihelp.ai communities
-
-Usage:
-  npx tsx scripts/evaluate-community.ts --url <URL>
-  npx tsx scripts/evaluate-community.ts --process-queue [--force]
-    `);
+    console.log('Community Evaluator: no action specified');
   }
 }
 
-main().catch(err => {
-  console.error('💥 Fatal:', err);
-  process.exit(1);
-});
+// CLI entrypoint
+if (process.argv[1]?.includes('/scripts/')) {
+  const args = process.argv.slice(2);
+  const opts: Parameters<typeof run>[0] = {};
+
+  if (args.includes('--process-queue')) {
+    opts.processQueue = true;
+    opts.force = args.includes('--force');
+  } else if (args.includes('--url')) {
+    opts.url = args[args.indexOf('--url') + 1];
+  }
+
+  run(opts).catch(err => {
+    console.error('💥 Fatal:', err);
+    process.exit(1);
+  });
+}

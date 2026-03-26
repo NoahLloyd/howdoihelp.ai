@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   DEFAULT_PROMPTS,
   detectTemplateVariables,
@@ -325,8 +326,14 @@ function buildGuidesValue(guides: GuideForTester[]): string {
 // ─── Component ──────────────────────────────────────────────
 
 export default function PromptTesterPage() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") as PromptKey | null;
+  const validTabs = TABS.map((t) => t.key);
+
   // Active tab
-  const [activeTab, setActiveTab] = useState<PromptKey>("recommend");
+  const [activeTab, setActiveTab] = useState<PromptKey>(
+    tabParam && validTabs.includes(tabParam) ? tabParam : "recommend"
+  );
 
   // Template (single prompt with {{variables}})
   const [template, setTemplate] = useState(DEFAULT_PROMPTS.recommend);

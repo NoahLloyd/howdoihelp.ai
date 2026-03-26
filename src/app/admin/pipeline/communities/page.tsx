@@ -1,10 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { PipelineShell } from "../pipeline-shell";
+
+const EVAL_MODELS = [
+  { id: "", label: "Default (Haiku 4.5)" },
+  { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+  { id: "claude-sonnet-4-5-20250514", label: "Claude Sonnet 4.5" },
+] as const;
 
 export default function CommunitiesPipelinePage() {
   const [communityEvalUrl, setCommunityEvalUrl] = useState("");
+  const [evalModel, setEvalModel] = useState("");
 
   return (
     <PipelineShell title="Community Pipeline">
@@ -103,18 +111,26 @@ export default function CommunitiesPipelinePage() {
                     Claude evaluates, scores, and auto-promotes or rejects community candidates
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <div
-                    className={`w-2 h-2 rounded-full ${ctx.statusColor(ctx.statuses["evaluate-community"] || "idle")} ${
-                      ctx.activeScript === "evaluate-community" ? "animate-pulse" : ""
-                    }`}
-                  />
-                  <span className="text-[10px] font-mono text-muted">
-                    {ctx.statusLabel(ctx.statuses["evaluate-community"] || "idle")}
-                  </span>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href="/admin/prompt-tester?tab=evaluate-community"
+                    className="text-[10px] font-mono text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    Edit prompt
+                  </Link>
+                  <div className="flex items-center gap-1.5">
+                    <div
+                      className={`w-2 h-2 rounded-full ${ctx.statusColor(ctx.statuses["evaluate-community"] || "idle")} ${
+                        ctx.activeScript === "evaluate-community" ? "animate-pulse" : ""
+                      }`}
+                    />
+                    <span className="text-[10px] font-mono text-muted">
+                      {ctx.statusLabel(ctx.statuses["evaluate-community"] || "idle")}
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 mb-2">
                 <input
                   type="text"
                   placeholder="Paste a community URL to test a single evaluation..."
@@ -123,10 +139,23 @@ export default function CommunitiesPipelinePage() {
                   className="flex-1 px-3 py-2 text-xs bg-background border border-border rounded-md
                     placeholder:text-muted focus:outline-none focus:border-accent/50"
                 />
+                <select
+                  value={evalModel}
+                  onChange={(e) => setEvalModel(e.target.value)}
+                  className="px-2 py-2 text-xs bg-background border border-border rounded-md
+                    text-foreground focus:outline-none focus:border-accent/50 cursor-pointer"
+                >
+                  {EVAL_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2">
                 <button
                   onClick={() => {
                     if (!communityEvalUrl.trim()) return;
-                    ctx.runScript("evaluate-community", `&url=${encodeURIComponent(communityEvalUrl.trim())}`);
+                    const modelParam = evalModel ? `&model=${encodeURIComponent(evalModel)}` : "";
+                    ctx.runScript("evaluate-community", `&url=${encodeURIComponent(communityEvalUrl.trim())}${modelParam}`);
                   }}
                   disabled={!!ctx.activeScript || !communityEvalUrl.trim()}
                   className="px-4 py-2 text-xs font-medium bg-violet-500 text-white rounded-md
@@ -135,7 +164,10 @@ export default function CommunitiesPipelinePage() {
                   Test Single
                 </button>
                 <button
-                  onClick={() => ctx.runScript("evaluate-community")}
+                  onClick={() => {
+                    const modelParam = evalModel ? `&model=${encodeURIComponent(evalModel)}` : "";
+                    ctx.runScript("evaluate-community", modelParam || undefined);
+                  }}
                   disabled={!!ctx.activeScript}
                   className="px-4 py-2 text-xs font-medium bg-foreground text-background rounded-md
                     hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
