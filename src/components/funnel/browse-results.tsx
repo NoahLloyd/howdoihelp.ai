@@ -330,10 +330,10 @@ export function BrowseResults({ variant, headerContent }: BrowseResultsProps) {
                     setActivePath(path.id);
                     trackBrowseFilterUsed(variant, "category", path.id);
                   }}
-                  className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                  className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-all ${
                     isActive
-                      ? "bg-accent text-white shadow-sm"
-                      : "border border-border bg-card text-muted-foreground hover:border-accent/30 hover:text-foreground"
+                      ? "border-accent bg-accent text-white shadow-sm"
+                      : "border-border bg-card text-muted-foreground hover:border-accent/30 hover:text-foreground"
                   }`}
                 >
                   {path.label}
