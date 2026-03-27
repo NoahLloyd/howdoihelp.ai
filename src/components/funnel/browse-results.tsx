@@ -37,8 +37,8 @@ interface PathDef {
 }
 
 const PATHS: PathDef[] = [
-  { id: "act", label: "Take action", description: "Make a difference on AI safety." },
-  { id: "learn", label: "Learn", description: "Understand AI safety better." },
+  { id: "act", label: "Take action", description: "Make a difference on AI." },
+  { id: "learn", label: "Learn", description: "Understand the landscape." },
   { id: "connect", label: "Connect", description: "Find your people." },
 ];
 
@@ -306,7 +306,7 @@ export function BrowseResults({ variant, headerContent }: BrowseResultsProps) {
         >
           {headerContent || (
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-              Ways you can help with AI safety
+              Ways you can help with AI
             </h1>
           )}
         </motion.div>
@@ -519,9 +519,9 @@ function ResourceList({
 // ─── Action Explorer (quick / get involved / career) ──────────
 
 const ACTION_TABS: { id: ActionSubId; label: string }[] = [
-  { id: "quick", label: "2-minute actions" },
-  { id: "involved", label: "Get involved" },
-  { id: "career", label: "Build a career" },
+  { id: "quick", label: "Quick" },
+  { id: "involved", label: "Go further" },
+  { id: "career", label: "Career" },
 ];
 
 interface ActionExplorerProps {
