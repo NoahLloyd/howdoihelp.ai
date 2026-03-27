@@ -5,6 +5,11 @@ import { detectPlatform } from "@/lib/profile";
 
 export const dynamic = "force-dynamic";
 
+/** Warm-up ping — keeps the serverless function hot so POST is fast. */
+export function GET() {
+  return Response.json({ ok: true });
+}
+
 /**
  * Quick profile scrape - returns basic info (name, photo, headline) fast,
  * without waiting for Claude extraction. Used by the processing flow to

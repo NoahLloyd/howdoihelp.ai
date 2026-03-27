@@ -15,6 +15,11 @@ import type {
 
 export const dynamic = "force-dynamic";
 
+/** Warm-up ping — keeps the serverless function hot so POST is fast. */
+export function GET() {
+  return Response.json({ ok: true });
+}
+
 // ─── Guide Fetcher ──────────────────────────────────────────
 
 interface GuideWithProfile {

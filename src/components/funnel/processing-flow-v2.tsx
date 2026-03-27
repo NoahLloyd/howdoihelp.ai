@@ -422,54 +422,80 @@ export function ProcessingFlowV2({
   }, []);
 
   async function runPipeline() {
+    try {
+      await runPipelineInner();
+    } catch (err) {
+      console.error("[processing-flow] Pipeline crashed:", err);
+      // Fall back to algorithmic results so the user never sees "Something went wrong"
+      try {
+        const [resources, geo] = await Promise.all([fetchResources(), getGeoData()]);
+        const answers: UserAnswers = { time: "significant", profileText: text };
+        const ranked = rankResources(resources, answers, geo, "A");
+        const localCard = buildLocalCard(resources, answers, geo, "A");
+        const items: ResultItem[] = ranked.map((scored) => ({ kind: "resource" as const, scored }));
+        if (localCard) items.push({ kind: "local", card: localCard });
+        else items.push({ kind: "local", card: null });
+        onComplete(items, geo, answers);
+      } catch {
+        // Even the fallback failed — show empty results rather than crashing
+        onComplete([], { country: "Unknown", countryCode: "XX", isAuthoritarian: false }, { time: "significant" });
+      }
+    }
+  }
+
+  async function runPipelineInner() {
     let enrichedProfile: EnrichedProfile | undefined;
     let rawProfileText: string | undefined;
 
-    // Start background work immediately
+    // Start background work immediately — warm up serverless functions
     const bgFetch = Promise.all([fetchResources(), getGeoData()]);
 
-    // ─── Phase 1: Fetch URLs one by one ─────────────────
+    // ─── Phase 1: Fetch URLs ────────────────────────────
+    // Fire ALL scrape requests in parallel immediately so serverless
+    // cold starts overlap, but display them sequentially in the UI.
 
     if (urls.length > 0) {
+      // Kick off all fetches at once
+      const scrapePromises = urls.map((url) =>
+        fetch("/api/scrape-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        })
+          .then(async (res) => (res.ok ? (await res.json()).profile : null))
+          .catch(() => null),
+      );
+
+      // Show each URL scene sequentially, but the network is already in flight
       for (let i = 0; i < urls.length; i++) {
         const url = urls[i];
         const color = platformColor(url);
         const sceneStart = Date.now();
 
-        // Show fetching state
         setScene({ kind: "fetching", url, color, done: false });
 
-        // Actually fetch
-        try {
-          const res = await fetch("/api/scrape-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.profile) {
-              if (!enrichedProfile) {
-                enrichedProfile = data.profile;
-              } else {
-                mergeProfile(enrichedProfile, data.profile);
-              }
-            }
+        // Wait for THIS url's scrape to finish (already running in background)
+        const profile = await scrapePromises[i];
+        if (profile) {
+          if (!enrichedProfile) {
+            enrichedProfile = profile;
+          } else {
+            mergeProfile(enrichedProfile, profile);
           }
-        } catch { /* continue */ }
+        }
 
-        // Ensure bar was visible long enough
-        await waitAtLeast(2200, sceneStart);
+        // Ensure the scene was visible long enough for the animation
+        await waitAtLeast(1800, sceneStart);
 
         // Flip to done — check + filled bar animate in-place
         setScene({ kind: "fetching", url, color, done: true });
-        await wait(900);
+        await wait(700);
       }
 
       // Show profile card if we found one
       if (enrichedProfile && (enrichedProfile.fullName || enrichedProfile.photo)) {
         setScene({ kind: "profile", profile: enrichedProfile });
-        await wait(2800);
+        await wait(2200);
       }
 
     } else {
@@ -549,13 +575,20 @@ export function ProcessingFlowV2({
     if (!base.currentCompany && extra.currentCompany) base.currentCompany = extra.currentCompany;
     if (!base.photo && extra.photo) base.photo = extra.photo;
     if (extra.skills?.length > 0) {
+      if (!base.skills) base.skills = [];
       const existing = new Set(base.skills);
       for (const s of extra.skills) {
         if (!existing.has(s)) base.skills.push(s);
       }
     }
-    if (extra.experience?.length > 0) base.experience.push(...extra.experience);
-    if (extra.education?.length > 0) base.education.push(...extra.education);
+    if (extra.experience?.length > 0) {
+      if (!base.experience) base.experience = [];
+      base.experience.push(...extra.experience);
+    }
+    if (extra.education?.length > 0) {
+      if (!base.education) base.education = [];
+      base.education.push(...extra.education);
+    }
     if (extra.repos && extra.repos.length > 0) base.repos = [...(base.repos || []), ...extra.repos];
   }
 
