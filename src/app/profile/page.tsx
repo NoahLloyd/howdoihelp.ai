@@ -46,6 +46,10 @@ export default function ProfileFlowV2() {
     identifyVariant("A");
     trackFunnelStarted("A");
     setSavedRecs(hasSavedRecommendations());
+
+    // Warm serverless functions so they're hot when the user submits
+    fetch("/api/scrape-profile").catch(() => {});
+    fetch("/api/recommend").catch(() => {});
   }, []);
 
   // ─── Handlers ──────────────────────────────────────────────

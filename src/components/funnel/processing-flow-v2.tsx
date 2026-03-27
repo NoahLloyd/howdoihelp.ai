@@ -422,6 +422,28 @@ export function ProcessingFlowV2({
   }, []);
 
   async function runPipeline() {
+    try {
+      await runPipelineInner();
+    } catch (err) {
+      console.error("[processing-flow] Pipeline crashed:", err);
+      // Fall back to algorithmic results so the user never sees "Something went wrong"
+      try {
+        const [resources, geo] = await Promise.all([fetchResources(), getGeoData()]);
+        const answers: UserAnswers = { time: "significant", profileText: text };
+        const ranked = rankResources(resources, answers, geo, "A");
+        const localCard = buildLocalCard(resources, answers, geo, "A");
+        const items: ResultItem[] = ranked.map((scored) => ({ kind: "resource" as const, scored }));
+        if (localCard) items.push({ kind: "local", card: localCard });
+        else items.push({ kind: "local", card: null });
+        onComplete(items, geo, answers);
+      } catch {
+        // Even the fallback failed — show empty results rather than crashing
+        onComplete([], { country: "Unknown", countryCode: "XX", isAuthoritarian: false }, { time: "significant" });
+      }
+    }
+  }
+
+  async function runPipelineInner() {
     let enrichedProfile: EnrichedProfile | undefined;
     let rawProfileText: string | undefined;
 
@@ -553,13 +575,20 @@ export function ProcessingFlowV2({
     if (!base.currentCompany && extra.currentCompany) base.currentCompany = extra.currentCompany;
     if (!base.photo && extra.photo) base.photo = extra.photo;
     if (extra.skills?.length > 0) {
+      if (!base.skills) base.skills = [];
       const existing = new Set(base.skills);
       for (const s of extra.skills) {
         if (!existing.has(s)) base.skills.push(s);
       }
     }
-    if (extra.experience?.length > 0) base.experience.push(...extra.experience);
-    if (extra.education?.length > 0) base.education.push(...extra.education);
+    if (extra.experience?.length > 0) {
+      if (!base.experience) base.experience = [];
+      base.experience.push(...extra.experience);
+    }
+    if (extra.education?.length > 0) {
+      if (!base.education) base.education = [];
+      base.education.push(...extra.education);
+    }
     if (extra.repos && extra.repos.length > 0) base.repos = [...(base.repos || []), ...extra.repos];
   }
 
