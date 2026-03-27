@@ -452,10 +452,9 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo, on
           >
             <button
               onClick={onBrowse}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/30 hover:bg-card-hover hover:text-foreground"
+              className="text-[13px] text-muted/50 transition-colors hover:text-muted-foreground"
             >
-              See the full overview
-              <span aria-hidden="true">&rarr;</span>
+              See the full overview &rarr;
             </button>
           </motion.div>
         )}
