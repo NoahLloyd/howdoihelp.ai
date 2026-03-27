@@ -425,51 +425,55 @@ export function ProcessingFlowV2({
     let enrichedProfile: EnrichedProfile | undefined;
     let rawProfileText: string | undefined;
 
-    // Start background work immediately
+    // Start background work immediately — warm up serverless functions
     const bgFetch = Promise.all([fetchResources(), getGeoData()]);
 
-    // ─── Phase 1: Fetch URLs one by one ─────────────────
+    // ─── Phase 1: Fetch URLs ────────────────────────────
+    // Fire ALL scrape requests in parallel immediately so serverless
+    // cold starts overlap, but display them sequentially in the UI.
 
     if (urls.length > 0) {
+      // Kick off all fetches at once
+      const scrapePromises = urls.map((url) =>
+        fetch("/api/scrape-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        })
+          .then(async (res) => (res.ok ? (await res.json()).profile : null))
+          .catch(() => null),
+      );
+
+      // Show each URL scene sequentially, but the network is already in flight
       for (let i = 0; i < urls.length; i++) {
         const url = urls[i];
         const color = platformColor(url);
         const sceneStart = Date.now();
 
-        // Show fetching state
         setScene({ kind: "fetching", url, color, done: false });
 
-        // Actually fetch
-        try {
-          const res = await fetch("/api/scrape-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.profile) {
-              if (!enrichedProfile) {
-                enrichedProfile = data.profile;
-              } else {
-                mergeProfile(enrichedProfile, data.profile);
-              }
-            }
+        // Wait for THIS url's scrape to finish (already running in background)
+        const profile = await scrapePromises[i];
+        if (profile) {
+          if (!enrichedProfile) {
+            enrichedProfile = profile;
+          } else {
+            mergeProfile(enrichedProfile, profile);
           }
-        } catch { /* continue */ }
+        }
 
-        // Ensure bar was visible long enough
-        await waitAtLeast(2200, sceneStart);
+        // Ensure the scene was visible long enough for the animation
+        await waitAtLeast(1800, sceneStart);
 
         // Flip to done — check + filled bar animate in-place
         setScene({ kind: "fetching", url, color, done: true });
-        await wait(900);
+        await wait(700);
       }
 
       // Show profile card if we found one
       if (enrichedProfile && (enrichedProfile.fullName || enrichedProfile.photo)) {
         setScene({ kind: "profile", profile: enrichedProfile });
-        await wait(2800);
+        await wait(2200);
       }
 
     } else {
