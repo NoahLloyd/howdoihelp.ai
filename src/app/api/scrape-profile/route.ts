@@ -1,5 +1,4 @@
 import { scrapeLinkedInProfile } from "@/lib/linkedin-scraper";
-import { scrapeWithBrightData } from "@/lib/brightdata";
 import { githubLookup, scrapeXProfile, scrapeInstagramProfile, bestEffortFetch } from "@/lib/enrich";
 import { detectPlatform } from "@/lib/profile";
 
@@ -26,12 +25,6 @@ export async function POST(req: Request) {
     const platform = detectPlatform(url);
 
     if (platform === "linkedin") {
-      // Try Bright Data first for rich structured data
-      const bd = await scrapeWithBrightData(url);
-      if (bd.profile) {
-        return Response.json({ profile: bd.profile, platform });
-      }
-      // Fall back to free crawler UA scraper
       const { profile } = await scrapeLinkedInProfile(url);
       return Response.json({ profile, platform });
     }
