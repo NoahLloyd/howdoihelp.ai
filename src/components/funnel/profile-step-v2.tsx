@@ -23,10 +23,31 @@ const EXAMPLE_PROMPTS = [
 
 // ─── URL extraction ─────────────────────────────────────────
 
+/** Common TLDs for detecting bare-domain URLs (e.g. linkedin.com/in/someone) */
+const COMMON_TLDS = /\.(com|org|net|io|co|dev|ai|me|info|app|xyz|edu|gov|uk|de|fr|nl|dk|se|no|fi|jp|kr|ca|au|nz|in|br)\b/;
+
 function extractUrls(text: string): string[] {
-  const urlRegex = /https?:\/\/[^\s,)}\]>"']+/gi;
-  const matches = text.match(urlRegex) || [];
-  return [...new Set(matches)];
+  const urls: string[] = [];
+
+  // Match explicit https?:// URLs
+  const explicit = text.match(/https?:\/\/[^\s,)}\]>"']+/gi) || [];
+  urls.push(...explicit);
+
+  // Match bare domains like linkedin.com/in/someone or github.com/user
+  // Only if they contain a known TLD and aren't already captured above
+  const bareRegex = /(?<!\/)(?:www\.)?([a-z0-9][-a-z0-9]*\.)+[a-z]{2,}(?:\/[^\s,)}\]>"']*)?/gi;
+  const bareMatches = text.match(bareRegex) || [];
+  for (const m of bareMatches) {
+    if (COMMON_TLDS.test(m)) {
+      const full = m.startsWith("http") ? m : `https://${m}`;
+      // Skip if we already captured this via the explicit regex
+      if (!urls.some((u) => u.includes(m))) {
+        urls.push(full);
+      }
+    }
+  }
+
+  return [...new Set(urls)];
 }
 
 function urlToHost(url: string): string {
