@@ -18,6 +18,38 @@ const DANISH_GEO_NAMES: Record<string, string> = {
   "Denmark": "Danmark",
 };
 
+/** Fixed geo used to rank the local card on /skolegang. The page is for a
+ *  Danish audience, so we always score against Denmark regardless of IP. */
+const DENMARK_GEO: GeoData = {
+  country: "Denmark",
+  countryCode: "DK",
+  city: "Copenhagen",
+  isAuthoritarian: false,
+};
+
+/** Keep only resources that are Danish-local, or global/online (so the
+ *  event/community card never surfaces foreign local groups). */
+function filterToDanishLocal(resources: Resource[]): Resource[] {
+  return resources.filter((r) => {
+    const loc = (r.location || "").toLowerCase();
+    if (r.category !== "events" && r.category !== "communities") return true;
+    if (loc === "" || loc === "global" || loc === "online") return true;
+    return isDanishLocation(loc);
+  });
+}
+
+function isDanishLocation(loc: string): boolean {
+  return (
+    loc.includes("denmark") ||
+    loc.includes("danmark") ||
+    loc.includes("copenhagen") ||
+    loc.includes("københavn") ||
+    loc.includes("aarhus") ||
+    loc.includes("odense") ||
+    loc.includes("aalborg")
+  );
+}
+
 function toDanishGeo(geo: GeoData): GeoData {
   return {
     ...geo,
@@ -58,11 +90,11 @@ const STATIC_ACTIONS = [
   },
   {
     id: "bluedot",
-    title: "Tag et BlueDot-kursus",
-    description: "Gratis onlinekurser om hvordan vi sikrer, at AI-udviklingen går godt for alle.",
-    href: "https://course.bluedot.org/",
+    title: "Bliv klog på hvor AI er på vej hen",
+    description: "Gratis onlinekursus, der forklarer hvad der sker med AI, og hvad vi kan gøre. Ingen teknisk baggrund nødvendig. Næste hold er åbent for tilmelding.",
+    href: "https://bluedot.org/courses/agi-strategy",
     org: "BlueDot Impact",
-    minutes: 1200,
+    minutes: 1500,
   },
   {
     id: "jobs",
@@ -113,11 +145,12 @@ export function SkolegangLanding() {
         fetchResources(),
         getGeoData(),
       ]);
-      setAllResources(resources);
+      const danishResources = filterToDanishLocal(resources);
+      setAllResources(danishResources);
       const danishGeo = toDanishGeo(geoData);
       setGeo(danishGeo);
 
-      const card = buildLocalCard(resources, { time: "significant" }, geoData, "C");
+      const card = buildLocalCard(danishResources, { time: "significant" }, DENMARK_GEO, "C");
       setLocalCard(card);
       setCommunityLoading(false);
     }
@@ -143,10 +176,17 @@ export function SkolegangLanding() {
 
   const handleLocationChange = useCallback(
     (newGeo: GeoData) => {
-      const danishGeo = toDanishGeo(newGeo);
-      setGeo(danishGeo);
+      // On /skolegang we always filter to Danish resources — the picker only
+      // lets users bias which Danish city is "near them".
+      const pinnedGeo: GeoData = {
+        ...newGeo,
+        country: "Denmark",
+        countryCode: "DK",
+      };
+      const displayGeo = toDanishGeo(pinnedGeo);
+      setGeo(displayGeo);
       if (!allResources) return;
-      const newCard = buildLocalCard(allResources, { time: "significant" }, newGeo, "C");
+      const newCard = buildLocalCard(allResources, { time: "significant" }, pinnedGeo, "C");
       setLocalCard(newCard);
       track("skolegang_location_changed", {
         city: newGeo.city,
@@ -325,16 +365,7 @@ function toDanishLocation(location: string): string {
 
 /** Check if a resource location is Danish */
 function isDanishResource(location: string): boolean {
-  const loc = location.toLowerCase();
-  return (
-    loc.includes("denmark") ||
-    loc.includes("danmark") ||
-    loc.includes("copenhagen") ||
-    loc.includes("københavn") ||
-    loc.includes("aarhus") ||
-    loc.includes("odense") ||
-    loc.includes("aalborg")
-  );
+  return isDanishLocation(location.toLowerCase());
 }
 
 /** Provide a Danish description for Danish community/event resources */
