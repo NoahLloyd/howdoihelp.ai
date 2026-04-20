@@ -10,7 +10,10 @@ import { ResourceCard } from "@/components/results/resource-card";
 import { LocationPicker } from "@/components/results/location-picker";
 import { OrgLogo } from "@/components/results/org-logo";
 import { getOrgDisplayName } from "@/lib/org-logos";
+import { withUtm } from "@/lib/utils";
 import type { Resource, GeoData, LocalCard } from "@/types";
+
+const UTM_CAMPAIGN = "skolegang";
 
 /** Map English city/country names to Danish for geo display */
 const DANISH_GEO_NAMES: Record<string, string> = {
@@ -321,13 +324,14 @@ function StaticActionCard({
   onClick: (id: string, href: string) => void;
 }) {
   const displayName = getOrgDisplayName(action.org);
+  const href = withUtm(action.href, UTM_CAMPAIGN, action.id);
 
   return (
     <a
-      href={action.href}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
-      onClick={() => onClick(action.id, action.href)}
+      onClick={() => onClick(action.id, href)}
       className="group block w-full overflow-hidden rounded-xl border border-border bg-card text-left transition-all hover:border-accent/30 hover:bg-card-hover"
     >
       <div className="p-4">
@@ -430,6 +434,7 @@ function CommunityCardGroup({
       <ResourceCard
         scored={localCard.anchor}
         variant="C"
+        campaignOverride={UTM_CAMPAIGN}
         customDescription={danishDescription(localCard.anchor.resource)}
         customLocation={toDanishLocation(localCard.anchor.resource.location || "")}
         formatTimeFn={formatTimeDa}
@@ -479,6 +484,7 @@ function CommunityCardGroup({
                       key={scored.resource.id}
                       scored={scored}
                       variant="C"
+                      campaignOverride={UTM_CAMPAIGN}
                       customDescription={danishDescription(scored.resource)}
                       customLocation={toDanishLocation(scored.resource.location || "")}
                       formatTimeFn={formatTimeDa}

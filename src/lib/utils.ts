@@ -6,16 +6,38 @@ import { Variant } from "@/types";
 export function trackUrl(
   url: string,
   variant: Variant,
-  resourceId: string
+  resourceId: string,
+  campaignOverride?: string
 ): string {
   try {
     const u = new URL(url);
     u.searchParams.set("utm_source", "howdoihelp");
-    u.searchParams.set("utm_campaign", variant);
+    u.searchParams.set("utm_medium", "referral");
+    u.searchParams.set("utm_campaign", campaignOverride || variant);
     u.searchParams.set("utm_content", resourceId);
     return u.toString();
   } catch {
     // If the URL is malformed, return as-is
+    return url;
+  }
+}
+
+/**
+ * Append plain UTM params to a static outbound URL (no resource id).
+ */
+export function withUtm(
+  url: string,
+  campaign: string,
+  content?: string
+): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.set("utm_source", "howdoihelp");
+    u.searchParams.set("utm_medium", "referral");
+    u.searchParams.set("utm_campaign", campaign);
+    if (content) u.searchParams.set("utm_content", content);
+    return u.toString();
+  } catch {
     return url;
   }
 }
