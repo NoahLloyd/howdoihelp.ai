@@ -16,6 +16,8 @@ interface ResourceCardProps {
   formatTimeFn?: (minutes: number) => string;
   dateLocale?: string;
   onClickTrack?: (resourceId: string) => void;
+  /** Override utm_campaign on the outbound URL (e.g. "skolegang"). */
+  campaignOverride?: string;
 }
 
 export function ResourceCard({
@@ -28,9 +30,10 @@ export function ResourceCard({
   formatTimeFn,
   dateLocale,
   onClickTrack,
+  campaignOverride,
 }: ResourceCardProps) {
   const { resource } = scored;
-  const url = trackUrl(resource.url, variant, resource.id);
+  const url = trackUrl(resource.url, variant, resource.id, campaignOverride);
   const displayName = getOrgDisplayName(resource.source_org, resource.url);
 
   // Parse dates
