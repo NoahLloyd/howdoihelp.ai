@@ -801,11 +801,11 @@ function LearnExplorer({ resources, variant, onClickTrack }: LearnExplorerProps)
   const [search, setSearch] = useState("");
 
   const quickReads = useMemo(
-    () => resources.filter((r) => r.min_minutes < 1500),
+    () => resources.filter((r) => r.category !== "programs"),
     [resources]
   );
   const courses = useMemo(
-    () => resources.filter((r) => r.min_minutes >= 1500),
+    () => resources.filter((r) => r.category === "programs"),
     [resources]
   );
 
