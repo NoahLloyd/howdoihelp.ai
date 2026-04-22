@@ -156,7 +156,7 @@ export async function run(opts: { dryRun?: boolean } = {}) {
   console.log(`\n✅ Done: ${result.inserted} new candidates, ${result.skipped} skipped (already exist), ${result.errors} errors.`);
 }
 
-if (process.argv[1]?.includes('/scripts/')) {
+if (process.argv[1]?.endsWith('/scripts/gatherers/gather-ea-lesswrong.ts')) {
   run({ dryRun: process.argv.includes('--dry-run') }).catch((err) => {
     console.error('💥 Fatal:', err);
     process.exit(1);

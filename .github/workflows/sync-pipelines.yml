@@ -1,0 +1,47 @@
+name: Sync scraping pipelines
+
+on:
+  schedule:
+    - cron: "0 6 */2 * *"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-pipelines
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      EVAL_MODEL: claude-haiku-4-5-20251001
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Events pipeline
+        run: npx tsx scripts/sync-all-events.ts
+        continue-on-error: true
+
+      - name: Communities pipeline
+        run: npx tsx scripts/sync-all-communities.ts
+        continue-on-error: true
+
+      - name: Programs pipeline
+        run: npx tsx scripts/sync-programs.ts
+        continue-on-error: true
+
+      - name: Cleanup (standardize countries + penalize dead events)
+        run: |
+          npx tsx scripts/standardize-countries.ts
+          npx tsx scripts/penalize-dead-events.ts
+        continue-on-error: true

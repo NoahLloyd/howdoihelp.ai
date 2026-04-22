@@ -255,7 +255,7 @@ export async function run(opts: { dryRun?: boolean } = {}) {
   console.log(`\n✅ Done: ${result.inserted} new candidates, ${result.skipped} skipped, ${result.errors} errors.`);
 }
 
-if (process.argv[1]?.includes('/scripts/')) {
+if (process.argv[1]?.endsWith('/scripts/gatherers/gather-eventbrite.ts')) {
   run({ dryRun: process.argv.includes('--dry-run') }).catch((err) => {
     console.error('💥 Fatal:', err);
     process.exit(1);

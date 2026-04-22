@@ -121,7 +121,7 @@ ${lines.join('\n')}
     existing_communities: existingCommunitiesVar,
   });
 
-  const model = modelOverride || activePrompt.model || 'claude-haiku-4-5-20251001';
+  const model = modelOverride || process.env.EVAL_MODEL || activePrompt.model || 'claude-haiku-4-5-20251001';
   console.log(`  Using model: ${model}`);
 
   const response = await getAnthropicClient().messages.create({
@@ -502,7 +502,7 @@ export async function run(opts: { processQueue?: boolean; force?: boolean; url?:
 }
 
 // CLI entrypoint
-if (process.argv[1]?.includes('/scripts/')) {
+if (process.argv[1]?.endsWith('/scripts/evaluate-community.ts')) {
   const args = process.argv.slice(2);
   const opts: Parameters<typeof run>[0] = {};
 

@@ -307,7 +307,7 @@ export async function run(opts: { dryRun?: boolean; programs?: boolean } = {}) {
 }
 
 // CLI entrypoint - only runs when executed directly via tsx
-if (process.argv[1]?.includes('/scripts/')) {
+if (process.argv[1]?.endsWith('/scripts/gatherers/gather-aisafety.ts')) {
   const dryRun = process.argv.includes('--dry-run');
   const programs = process.argv.includes('--programs');
   run({ dryRun, programs }).catch((err) => {
