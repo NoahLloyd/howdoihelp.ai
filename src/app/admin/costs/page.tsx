@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { fetchApiUsageStats, type ApiUsageStats } from "../actions";
+import { AdminSimpleSkeleton } from "@/components/ui/skeletons";
 
 export default function CostsPage() {
   const [stats, setStats] = useState<ApiUsageStats | null>(null);
@@ -25,14 +26,7 @@ export default function CostsPage() {
   }, [load]);
 
   if (loading) {
-    return (
-      <div className="min-h-dvh bg-background flex items-center justify-center">
-        <div className="flex items-center gap-3 text-muted text-sm">
-          <div className="w-4 h-4 border-2 border-border border-t-muted-foreground rounded-full animate-spin" />
-          Loading...
-        </div>
-      </div>
-    );
+    return <AdminSimpleSkeleton />;
   }
 
   if (error || !stats) {

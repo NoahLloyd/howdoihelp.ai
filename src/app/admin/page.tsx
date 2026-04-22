@@ -8,6 +8,7 @@ import { fetchAllResources, toggleResourceEnabled, saveResource, deleteResource 
 import { CATEGORIES, groupByCategory } from "@/lib/categories";
 import { ResourceEditor } from "@/components/admin/resource-editor";
 import { DeleteModal } from "@/components/admin/delete-modal";
+import { AdminHubSkeleton } from "@/components/ui/skeletons";
 
 export default function AdminHub() {
   const [resources, setResources] = useState<Resource[]>([]);
@@ -76,14 +77,7 @@ export default function AdminHub() {
   const totalPending = resources.filter((r) => r.status === "pending").length;
 
   if (loading) {
-    return (
-      <div className="min-h-dvh bg-background flex items-center justify-center">
-        <div className="flex items-center gap-3 text-muted text-sm tracking-wide">
-          <div className="w-4 h-4 border-2 border-border border-t-muted-foreground rounded-full animate-spin" />
-          Loading...
-        </div>
-      </div>
-    );
+    return <AdminHubSkeleton />;
   }
 
   return (
