@@ -394,7 +394,7 @@ export async function run(opts: { dryRun?: boolean } = {}) {
 }
 
 // CLI entrypoint
-if (process.argv[1]?.includes('/scripts/')) {
+if (process.argv[1]?.endsWith('/scripts/sync-communities.ts')) {
   run({ dryRun: process.argv.includes("--dry-run") }).catch((err) => {
     console.error("💥 Fatal error:", err);
     process.exit(1);

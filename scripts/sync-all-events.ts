@@ -76,7 +76,7 @@ export async function run(opts: { skipGather?: boolean; skipEvaluate?: boolean }
 }
 
 // CLI entrypoint
-if (process.argv[1]?.includes('/scripts/')) {
+if (process.argv[1]?.endsWith('/scripts/sync-all-events.ts')) {
   const args = process.argv.slice(2);
   run({
     skipGather: args.includes('--skip-gather'),
