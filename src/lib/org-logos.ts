@@ -156,7 +156,11 @@ export function getOrgDisplayName(sourceOrg: string, resourceUrl?: string): stri
     return domainToName(extDomain);
   }
 
-  return DISPLAY_NAMES[sourceOrg] ?? sourceOrg;
+  const mapped = DISPLAY_NAMES[sourceOrg] ?? sourceOrg;
+  // Composite names joined with " / " (multiple co-presenting orgs) — keep
+  // only the primary org so cards don't blow out their header row.
+  const primary = mapped.split(" / ")[0];
+  return primary;
 }
 
 /** Get the Google Favicon API URL for a domain */
