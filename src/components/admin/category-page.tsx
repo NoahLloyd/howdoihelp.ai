@@ -15,6 +15,7 @@ import {
 import { CATEGORIES } from "@/lib/categories";
 import { ResourceEditor } from "@/components/admin/resource-editor";
 import { DeleteModal } from "@/components/admin/delete-modal";
+import { AdminCategorySkeleton } from "@/components/ui/skeletons";
 
 interface CategoryPageProps {
   categoryId: ResourceCategory;
@@ -121,14 +122,7 @@ export function CategoryPage({ categoryId }: CategoryPageProps) {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-dvh bg-background flex items-center justify-center">
-        <div className="flex items-center gap-3 text-muted text-sm tracking-wide">
-          <div className="w-4 h-4 border-2 border-border border-t-muted-foreground rounded-full animate-spin" />
-          Loading {catMeta.label.toLowerCase()}...
-        </div>
-      </div>
-    );
+    return <AdminCategorySkeleton />;
   }
 
   const pending = resources.filter((r) => r.status === "pending");

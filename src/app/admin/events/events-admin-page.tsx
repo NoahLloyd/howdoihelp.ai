@@ -14,6 +14,7 @@ import {
   type EventCandidate,
 } from "@/app/admin/actions";
 import { ResourceEditor } from "@/components/admin/resource-editor";
+import { AdminPipelineSkeleton } from "@/components/ui/skeletons";
 
 const PAGE_SIZE = 50;
 
@@ -193,11 +194,7 @@ export function EventsAdminPage() {
     : filteredCandidates.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   if (loading) {
-    return (
-      <div className="min-h-dvh flex items-center justify-center bg-background">
-        <div className="animate-pulse text-muted font-mono text-sm">Loading events timeline...</div>
-      </div>
-    );
+    return <AdminPipelineSkeleton />;
   }
 
   return (

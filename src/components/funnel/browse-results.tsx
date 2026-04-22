@@ -21,6 +21,7 @@ import type {
 } from "@/types";
 import { ResourceCard } from "@/components/results/resource-card";
 import { LocationPicker } from "@/components/results/location-picker";
+import { BrowseSkeleton } from "@/components/ui/skeletons";
 
 
 // ─── Path definitions ─────────────────────────────────────────
@@ -286,13 +287,7 @@ export function BrowseResults({ variant, headerContent }: BrowseResultsProps) {
   const activePathDef = PATHS.find((p) => p.id === activePath)!;
 
   if (loading) {
-    return (
-      <main className="flex min-h-dvh items-center justify-center">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          <span className="shimmer text-muted-foreground/70 text-sm">Loading</span>
-        </motion.div>
-      </main>
-    );
+    return <BrowseSkeleton />;
   }
 
   return (
