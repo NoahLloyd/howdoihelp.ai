@@ -60,9 +60,9 @@ export function ResourceCard({
             resourceUrl={resource.url}
             size={18}
           />
-          <span className="font-medium">{displayName}</span>
+          <span className="min-w-0 font-medium">{displayName}</span>
           {resource.category !== "communities" && (
-            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+            <span className="shrink-0 whitespace-nowrap rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
               {(formatTimeFn || formatTime)(resource.min_minutes)}
             </span>
           )}
