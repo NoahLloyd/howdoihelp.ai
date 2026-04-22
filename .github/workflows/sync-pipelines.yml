@@ -40,8 +40,6 @@ jobs:
         run: npx tsx scripts/sync-programs.ts
         continue-on-error: true
 
-      - name: Cleanup (standardize countries + penalize dead events)
-        run: |
-          npx tsx scripts/standardize-countries.ts
-          npx tsx scripts/penalize-dead-events.ts
+      - name: Cleanup (standardize countries)
+        run: npx tsx scripts/standardize-countries.ts
         continue-on-error: true
