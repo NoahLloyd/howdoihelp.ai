@@ -1,4 +1,4 @@
-import { getSupabase } from "./supabase";
+import { getSupabase, fetchAllRows } from "./supabase";
 import { resources as localResources } from "@/data/resources";
 import type { Resource, Variant, UserAnswers } from "@/types";
 
@@ -26,21 +26,18 @@ export async function fetchResources(): Promise<Resource[]> {
   }
 
   try {
-    const { data, error } = await supabase
-      .from("resources")
-      .select("*")
-      .eq("enabled", true)
-      .eq("status", "approved")
-      .order("ev_general", { ascending: false });
-
-    if (error) {
-      console.error("Supabase fetch error, falling back to local:", error.message);
-      return filterActive(localResources);
-    }
-
-    return filterActive((data as Resource[]) || localResources);
+    const data = await fetchAllRows<Resource>((from, to) =>
+      supabase
+        .from("resources")
+        .select("*")
+        .eq("enabled", true)
+        .eq("status", "approved")
+        .order("ev_general", { ascending: false })
+        .range(from, to)
+    );
+    return filterActive(data.length ? data : localResources);
   } catch (err) {
-    console.error("Supabase connection error, falling back to local:", err);
+    console.error("Supabase fetch error, falling back to local:", err);
     return filterActive(localResources);
   }
 }

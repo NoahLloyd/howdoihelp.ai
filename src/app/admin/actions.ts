@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import type { Resource, ResourceCategory } from "@/types";
 import type { PromptKey, PromptVersion } from "@/lib/prompts";
 import { clearPromptCache } from "@/lib/prompts";
+import { fetchAllRows } from "@/lib/supabase";
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -46,14 +47,14 @@ async function verifyAdmin() {
 export async function fetchAllResources(): Promise<Resource[]> {
   await verifyAdmin();
   const supabase = getServiceClient();
-  const { data, error } = await supabase
-    .from("resources")
-    .select("*")
-    .order("category", { ascending: true })
-    .order("ev_general", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data as Resource[]) || [];
+  return fetchAllRows<Resource>((from, to) =>
+    supabase
+      .from("resources")
+      .select("*")
+      .order("category", { ascending: true })
+      .order("ev_general", { ascending: false })
+      .range(from, to)
+  );
 }
 
 export async function fetchResourcesByCategory(
@@ -61,14 +62,14 @@ export async function fetchResourcesByCategory(
 ): Promise<Resource[]> {
   await verifyAdmin();
   const supabase = getServiceClient();
-  const { data, error } = await supabase
-    .from("resources")
-    .select("*")
-    .eq("category", category)
-    .order("ev_general", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data as Resource[]) || [];
+  return fetchAllRows<Resource>((from, to) =>
+    supabase
+      .from("resources")
+      .select("*")
+      .eq("category", category)
+      .order("ev_general", { ascending: false })
+      .range(from, to)
+  );
 }
 
 /** Public fetch - only approved + enabled resources. */
@@ -76,16 +77,16 @@ export async function fetchPublicResources(
   category: ResourceCategory
 ): Promise<Resource[]> {
   const supabase = getServiceClient();
-  const { data, error } = await supabase
-    .from("resources")
-    .select("*")
-    .eq("category", category)
-    .eq("status", "approved")
-    .eq("enabled", true)
-    .order("ev_general", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data as Resource[]) || [];
+  return fetchAllRows<Resource>((from, to) =>
+    supabase
+      .from("resources")
+      .select("*")
+      .eq("category", category)
+      .eq("status", "approved")
+      .eq("enabled", true)
+      .order("ev_general", { ascending: false })
+      .range(from, to)
+  );
 }
 
 // ─── Toggle ─────────────────────────────────────────────────
@@ -647,13 +648,16 @@ export async function fetchTesterData(): Promise<TesterData> {
   const supabase = getServiceClient();
 
   // Fetch resources + guides in parallel
-  const [resourcesRes, guidesRes] = await Promise.all([
-    supabase
-      .from("resources")
-      .select("*")
-      .eq("status", "approved")
-      .eq("enabled", true)
-      .order("ev_general", { ascending: false }),
+  const [allResources, guidesRes] = await Promise.all([
+    fetchAllRows<Resource>((from, to) =>
+      supabase
+        .from("resources")
+        .select("*")
+        .eq("status", "approved")
+        .eq("enabled", true)
+        .order("ev_general", { ascending: false })
+        .range(from, to)
+    ),
     supabase
       .from("guides")
       .select("*")
@@ -664,7 +668,6 @@ export async function fetchTesterData(): Promise<TesterData> {
 
   // Filter out past-date events/programs (matches production behavior in lib/data.ts)
   const today = new Date().toISOString().slice(0, 10);
-  const allResources = (resourcesRes.data as Resource[]) || [];
   const resources = allResources.filter((r) => {
     if (r.event_date && r.event_date < today) return false;
     if (r.deadline_date && r.deadline_date < today) return false;
