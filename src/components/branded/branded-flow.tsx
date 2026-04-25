@@ -27,6 +27,7 @@ import {
   BrandedSkeleton,
   type BrandConfig,
 } from "./branded-header";
+import { JoshLinktree } from "./josh-linktree";
 import type {
   Variant,
   TimeCommitment,
@@ -331,6 +332,24 @@ export function BrandedFlow({ brand }: { brand: BrandConfig }) {
         <ProfileStepV2 onSubmit={handleProfileSubmit} onSkip={handleProfileSkip} />
         {savedRecs && <SavedRecsLink onClick={handleViewSavedRecs} />}
       </>
+    );
+  }
+
+  // Variant C, /josh only — Josh's Linktree-style page replaces the Q1 hero.
+  // No BrandedHeader here: the Linktree itself shows Josh's avatar/name as the
+  // central visual, and a sticky header would clash with that hierarchy.
+  if (brand.id === "josh") {
+    return (
+      <JoshLinktree
+        onTakeAction={() => goTo("browse")}
+        onLinkClick={(linkId, href) =>
+          trackBrandEvent(`${brand.id}_linktree_click`, {
+            link_id: linkId,
+            href,
+            variant,
+          })
+        }
+      />
     );
   }
 
