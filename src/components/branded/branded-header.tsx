@@ -4,7 +4,7 @@ import Image from "next/image";
 
 
 export type BrandConfig = {
-  id: "vin" | "aimworried";
+  id: "vin" | "aimworried" | "josh";
   displayName: string;
   tagline: string;
   avatarSrc: string;
@@ -33,6 +33,13 @@ export const AIMWORRIED_BRAND: BrandConfig = {
     secondary: "worried",
     color: "#2F3FD9",
   },
+};
+
+export const JOSH_BRAND: BrandConfig = {
+  id: "josh",
+  displayName: "Josh Thor",
+  tagline: "Learn more about risks from AI and take action.",
+  avatarSrc: "/josh/avatar.jpg",
 };
 
 /**
