@@ -157,6 +157,44 @@ export function trackTimeToFirstClick(variant: Variant, ms: number) {
   });
 }
 
+// ─── Voice Mode Events ──────────────────────────────────────
+
+/** User pressed the mic button to begin recording. */
+export function trackVoiceStarted(variant: Variant, surface: "profile" | "position") {
+  posthog.capture("voice_started", {
+    ...variantProps(variant),
+    surface,
+  });
+}
+
+/** Voice recording was successfully transcribed. */
+export function trackVoiceTranscribed(
+  variant: Variant,
+  surface: "profile" | "position",
+  charCount: number,
+  durationMs: number
+) {
+  posthog.capture("voice_transcribed", {
+    ...variantProps(variant),
+    surface,
+    char_count: charCount,
+    duration_ms: durationMs,
+  });
+}
+
+/** Voice mode failed (permission, transcription, network, etc.). */
+export function trackVoiceError(
+  variant: Variant,
+  surface: "profile" | "position",
+  reason: string
+) {
+  posthog.capture("voice_error", {
+    ...variantProps(variant),
+    surface,
+    reason,
+  });
+}
+
 // ─── Super Properties ───────────────────────────────────────
 
 /** Set user properties that persist across sessions. */

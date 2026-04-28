@@ -2,16 +2,20 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Square, ArrowRight } from "lucide-react";
+import { Loader2, Mic, Square, ArrowRight } from "lucide-react";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import { trackVoiceError, trackVoiceStarted, trackVoiceTranscribed } from "@/lib/tracking";
+import type { Variant } from "@/types";
 
 // ─── Types ──────────────────────────────────────────────────
 
 interface ProfileStepV2Props {
   onSubmit: (text: string, urls: string[]) => void;
   onSkip: () => void;
+  variant?: Variant;
 }
 
-type Mode = "idle" | "typing" | "listening" | "transcribed";
+type Mode = "idle" | "typing" | "listening" | "transcribing" | "transcribed";
 
 // ─── Example Prompts ─────────────────────────────────────────
 
@@ -58,81 +62,6 @@ function urlToHost(url: string): string {
   }
 }
 
-// ─── Speech Recognition Hook ────────────────────────────────
-
-interface SpeechRecognitionEvent {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-function useSpeechRecognition() {
-  const recognitionRef = useRef<ReturnType<typeof createRecognition> | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const [isSupported, setIsSupported] = useState(false);
-  const onResultRef = useRef<((text: string, isFinal: boolean) => void) | null>(null);
-
-  useEffect(() => {
-    const supported = typeof window !== "undefined" &&
-      ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
-    setIsSupported(supported);
-  }, []);
-
-  const start = useCallback((onResult: (text: string, isFinal: boolean) => void) => {
-    if (!isSupported) return;
-    onResultRef.current = onResult;
-
-    const recognition = createRecognition();
-    if (!recognition) return;
-
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-
-    recognition.onresult = (e: SpeechRecognitionEvent) => {
-      let interim = "";
-      let final = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const transcript = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          final += transcript;
-        } else {
-          interim += transcript;
-        }
-      }
-      if (final) onResultRef.current?.(final, true);
-      else if (interim) onResultRef.current?.(interim, false);
-    };
-
-    recognition.onerror = () => {
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  }, [isSupported]);
-
-  const stop = useCallback(() => {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    setIsListening(false);
-  }, []);
-
-  return { isListening, isSupported, start, stop };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createRecognition(): any {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  if (!SR) return null;
-  return new SR();
-}
-
 // ─── Animated Waveform ──────────────────────────────────────
 
 function VoiceWaveform() {
@@ -170,17 +99,42 @@ function useIsMac() {
 
 // ─── Component ──────────────────────────────────────────────
 
-export function ProfileStepV2({ onSubmit, onSkip }: ProfileStepV2Props) {
+export function ProfileStepV2({ onSubmit, onSkip, variant = "A" }: ProfileStepV2Props) {
   const [input, setInput] = useState("");
-  const [interimText, setInterimText] = useState("");
   const [mode, setMode] = useState<Mode>("idle");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { isListening, isSupported, start, stop } = useSpeechRecognition();
+  const recordStartRef = useRef<number>(0);
   const isMac = useIsMac();
+
+  const handleTranscribed = useCallback(
+    (text: string) => {
+      setInput((prev) => (prev ? prev + " " + text : text));
+      const durationMs = recordStartRef.current ? Date.now() - recordStartRef.current : 0;
+      trackVoiceTranscribed(variant, "profile", text.length, durationMs);
+    },
+    [variant]
+  );
+
+  const {
+    state: voiceState,
+    isSupported: voiceSupported,
+    error: voiceError,
+    start: startVoice,
+    stop: stopVoice,
+  } = useVoiceRecorder({ onTranscribed: handleTranscribed });
+
+  const isListening = voiceState === "recording";
+  const isTranscribing = voiceState === "transcribing";
 
   const hasInput = input.trim().length > 0;
   const urls = extractUrls(input);
-  const displayText = isListening ? input + (interimText ? " " + interimText : "") : input;
+
+  // Track voice errors as they occur
+  useEffect(() => {
+    if (voiceState === "error" && voiceError) {
+      trackVoiceError(variant, "profile", voiceError);
+    }
+  }, [voiceState, voiceError, variant]);
 
   // Auto-focus with delay so entrance animation plays first
   useEffect(() => {
@@ -194,14 +148,15 @@ export function ProfileStepV2({ onSubmit, onSkip }: ProfileStepV2Props) {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.max(el.scrollHeight, 96)}px`;
-  }, [displayText]);
+  }, [input]);
 
   // Update mode based on state
   useEffect(() => {
     if (isListening) setMode("listening");
+    else if (isTranscribing) setMode("transcribing");
     else if (hasInput) setMode("typing");
     else setMode("idle");
-  }, [isListening, hasInput]);
+  }, [isListening, isTranscribing, hasInput]);
 
   function handleSubmit() {
     if (!hasInput) return;
@@ -210,24 +165,19 @@ export function ProfileStepV2({ onSubmit, onSkip }: ProfileStepV2Props) {
 
   function handleExampleClick(example: string) {
     setInput(example);
-    setInterimText("");
     // Focus textarea so user can edit/extend
     setTimeout(() => textareaRef.current?.focus(), 50);
   }
 
   function toggleVoice() {
     if (isListening) {
-      stop();
-    } else {
-      start((text, isFinal) => {
-        if (isFinal) {
-          setInput((prev) => (prev ? prev + " " + text : text));
-          setInterimText("");
-        } else {
-          setInterimText(text);
-        }
-      });
+      stopVoice();
+      return;
     }
+    if (isTranscribing) return;
+    recordStartRef.current = Date.now();
+    trackVoiceStarted(variant, "profile");
+    void startVoice();
   }
 
   return (
@@ -266,11 +216,8 @@ export function ProfileStepV2({ onSubmit, onSkip }: ProfileStepV2Props) {
           >
             <textarea
               ref={textareaRef}
-              value={displayText}
-              onChange={(e) => {
-                setInput(e.target.value);
-                setInterimText("");
-              }}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && hasInput) {
                   handleSubmit();
@@ -278,18 +225,20 @@ export function ProfileStepV2({ onSubmit, onSkip }: ProfileStepV2Props) {
               }}
               placeholder="Tell us about yourself..."
               rows={3}
-              className="block w-full resize-none bg-transparent px-5 pb-14 pt-5 text-[15px] leading-relaxed outline-none placeholder:text-muted/60"
+              disabled={isListening || isTranscribing}
+              className="block w-full resize-none bg-transparent px-5 pb-14 pt-5 text-[15px] leading-relaxed outline-none placeholder:text-muted/60 disabled:opacity-70"
             />
 
             {/* Bottom toolbar inside the input */}
             <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 pb-3">
               <div className="flex items-center gap-2">
                 {/* Voice button */}
-                {isSupported && (
+                {voiceSupported && (
                   <button
                     onClick={toggleVoice}
-                    className={`relative flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium transition-all ${
-                      isListening
+                    disabled={isTranscribing}
+                    className={`relative flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium transition-all disabled:opacity-70 ${
+                      isListening || isTranscribing
                         ? "bg-accent text-white"
                         : "bg-card-hover text-muted-foreground hover:text-foreground"
                     }`}
@@ -298,6 +247,11 @@ export function ProfileStepV2({ onSubmit, onSkip }: ProfileStepV2Props) {
                       <>
                         <Square className="h-3 w-3" fill="currentColor" />
                         <VoiceWaveform />
+                      </>
+                    ) : isTranscribing ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Transcribing</span>
                       </>
                     ) : (
                       <>
@@ -368,21 +322,35 @@ export function ProfileStepV2({ onSubmit, onSkip }: ProfileStepV2Props) {
             </div>
           </div>
 
-          {/* Contextual hint */}
+          {/* Contextual hint / voice error */}
           <AnimatePresence mode="wait">
-            <motion.p
-              key={mode}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2 }}
-              className="mt-3 text-[13px] text-muted"
-            >
-              {mode === "idle" && "Your background, interests, links. Anything helps."}
-              {mode === "typing" && "Drop any profile links in here too."}
-              {mode === "listening" && "Listening... speak naturally."}
-              {mode === "transcribed" && "Drop any profile links in here too."}
-            </motion.p>
+            {voiceError ? (
+              <motion.p
+                key="voice-error"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.2 }}
+                className="mt-3 text-[13px] text-rose-600 dark:text-rose-400"
+              >
+                {voiceError}
+              </motion.p>
+            ) : (
+              <motion.p
+                key={mode}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.2 }}
+                className="mt-3 text-[13px] text-muted"
+              >
+                {mode === "idle" && "Your background, interests, links. Anything helps."}
+                {mode === "typing" && "Drop any profile links in here too."}
+                {mode === "listening" && "Listening... speak naturally."}
+                {mode === "transcribing" && "Transcribing your recording..."}
+                {mode === "transcribed" && "Drop any profile links in here too."}
+              </motion.p>
+            )}
           </AnimatePresence>
         </motion.div>
 
