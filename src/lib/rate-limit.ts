@@ -1,21 +1,32 @@
-const windowMs = 60_000; // 1 minute
-const maxRequests = 100;
-
 interface Entry {
   count: number;
   resetAt: number;
 }
 
-const store = new Map<string, Entry>();
+interface Bucket {
+  store: Map<string, Entry>;
+  lastCleanup: number;
+  windowMs: number;
+  maxRequests: number;
+}
 
-// Clean up expired entries every 5 minutes
-let lastCleanup = Date.now();
-function cleanup() {
+const buckets = new Map<string, Bucket>();
+
+function getBucket(name: string, windowMs: number, maxRequests: number): Bucket {
+  let b = buckets.get(name);
+  if (!b) {
+    b = { store: new Map(), lastCleanup: Date.now(), windowMs, maxRequests };
+    buckets.set(name, b);
+  }
+  return b;
+}
+
+function cleanup(b: Bucket) {
   const now = Date.now();
-  if (now - lastCleanup < 300_000) return;
-  lastCleanup = now;
-  for (const [key, entry] of store) {
-    if (entry.resetAt < now) store.delete(key);
+  if (now - b.lastCleanup < 300_000) return;
+  b.lastCleanup = now;
+  for (const [key, entry] of b.store) {
+    if (entry.resetAt < now) b.store.delete(key);
   }
 }
 
@@ -26,15 +37,25 @@ export interface RateLimitResult {
   resetAt: number;
 }
 
-export function checkRateLimit(ip: string): RateLimitResult {
-  cleanup();
+export interface RateLimitOptions {
+  bucket?: string;
+  windowMs?: number;
+  maxRequests?: number;
+}
+
+export function checkRateLimit(ip: string, opts: RateLimitOptions = {}): RateLimitResult {
+  const bucketName = opts.bucket ?? "default";
+  const windowMs = opts.windowMs ?? 60_000;
+  const maxRequests = opts.maxRequests ?? 100;
+  const b = getBucket(bucketName, windowMs, maxRequests);
+  cleanup(b);
 
   const now = Date.now();
-  let entry = store.get(ip);
+  let entry = b.store.get(ip);
 
   if (!entry || entry.resetAt < now) {
     entry = { count: 0, resetAt: now + windowMs };
-    store.set(ip, entry);
+    b.store.set(ip, entry);
   }
 
   entry.count++;

@@ -2,17 +2,21 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, Mic, Square } from "lucide-react";
+import { ArrowRight, Loader2, Mic, Square } from "lucide-react";
 import { questionTwo } from "@/data/questions";
 import {
   trackQuestionAnswered,
   trackQuestionSkipped,
   trackProfileProvided,
   trackProfileSkipped,
+  trackVoiceError,
+  trackVoiceStarted,
+  trackVoiceTranscribed,
 } from "@/lib/tracking";
 import { QuestionCard } from "@/components/questions/question-card";
 import { ProfileStep } from "@/components/funnel/profile-step";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import type { Question, Variant, UserAnswers, IntentTag, ProfilePlatform } from "@/types";
 
 // ─── URL extraction ─────────────────────────────────────────
@@ -29,68 +33,6 @@ function urlToHost(url: string): string {
   } catch {
     return url;
   }
-}
-
-// ─── Speech Recognition ─────────────────────────────────────
-
-interface SpeechRecognitionEvent {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-function useSpeechRecognition() {
-  const recognitionRef = useRef<ReturnType<typeof createRecognition> | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const [isSupported, setIsSupported] = useState(false);
-  const onResultRef = useRef<((text: string, isFinal: boolean) => void) | null>(null);
-
-  useEffect(() => {
-    const supported = typeof window !== "undefined" &&
-      ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
-    setIsSupported(supported);
-  }, []);
-
-  const start = useCallback((onResult: (text: string, isFinal: boolean) => void) => {
-    if (!isSupported) return;
-    onResultRef.current = onResult;
-    const recognition = createRecognition();
-    if (!recognition) return;
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-    recognition.onresult = (e: SpeechRecognitionEvent) => {
-      let interim = "";
-      let final = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const transcript = e.results[i][0].transcript;
-        if (e.results[i].isFinal) final += transcript;
-        else interim += transcript;
-      }
-      if (final) onResultRef.current?.(final, true);
-      else if (interim) onResultRef.current?.(interim, false);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  }, [isSupported]);
-
-  const stop = useCallback(() => {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    setIsListening(false);
-  }, []);
-
-  return { isListening, isSupported, start, stop };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createRecognition(): any {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  if (!SR) return null;
-  return new SR();
 }
 
 function VoiceWaveform() {
@@ -126,17 +68,42 @@ const POSITIONED_EXAMPLES = [
 interface PositionedInputProps {
   onSubmit: (text: string, urls: string[]) => void;
   onSkip: () => void;
+  variant: Variant;
 }
 
-function PositionedInput({ onSubmit, onSkip }: PositionedInputProps) {
+function PositionedInput({ onSubmit, onSkip, variant }: PositionedInputProps) {
   const [input, setInput] = useState("");
-  const [interimText, setInterimText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { isListening, isSupported, start, stop } = useSpeechRecognition();
+  const recordStartRef = useRef<number>(0);
+
+  const handleTranscribed = useCallback(
+    (text: string) => {
+      setInput((prev) => (prev ? prev + " " + text : text));
+      const durationMs = recordStartRef.current ? Date.now() - recordStartRef.current : 0;
+      trackVoiceTranscribed(variant, "position", text.length, durationMs);
+    },
+    [variant]
+  );
+
+  const {
+    state: voiceState,
+    isSupported: voiceSupported,
+    error: voiceError,
+    start: startVoice,
+    stop: stopVoice,
+  } = useVoiceRecorder({ onTranscribed: handleTranscribed });
+
+  const isListening = voiceState === "recording";
+  const isTranscribing = voiceState === "transcribing";
 
   const hasInput = input.trim().length > 0;
   const urls = extractUrls(input);
-  const displayText = isListening ? input + (interimText ? " " + interimText : "") : input;
+
+  useEffect(() => {
+    if (voiceState === "error" && voiceError) {
+      trackVoiceError(variant, "position", voiceError);
+    }
+  }, [voiceState, voiceError, variant]);
 
   useEffect(() => {
     const t = setTimeout(() => textareaRef.current?.focus(), 400);
@@ -148,7 +115,7 @@ function PositionedInput({ onSubmit, onSkip }: PositionedInputProps) {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.max(el.scrollHeight, 80)}px`;
-  }, [displayText]);
+  }, [input]);
 
   function handleSubmit() {
     if (!hasInput) return;
@@ -157,17 +124,13 @@ function PositionedInput({ onSubmit, onSkip }: PositionedInputProps) {
 
   function toggleVoice() {
     if (isListening) {
-      stop();
-    } else {
-      start((text, isFinal) => {
-        if (isFinal) {
-          setInput((prev) => (prev ? prev + " " + text : text));
-          setInterimText("");
-        } else {
-          setInterimText(text);
-        }
-      });
+      stopVoice();
+      return;
     }
+    if (isTranscribing) return;
+    recordStartRef.current = Date.now();
+    trackVoiceStarted(variant, "position");
+    void startVoice();
   }
 
   return (
@@ -191,11 +154,8 @@ function PositionedInput({ onSubmit, onSkip }: PositionedInputProps) {
         >
           <textarea
             ref={textareaRef}
-            value={displayText}
-            onChange={(e) => {
-              setInput(e.target.value);
-              setInterimText("");
-            }}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && hasInput) {
                 handleSubmit();
@@ -203,16 +163,18 @@ function PositionedInput({ onSubmit, onSkip }: PositionedInputProps) {
             }}
             placeholder="I work as..."
             rows={3}
-            className="block w-full resize-none bg-transparent px-5 pb-14 pt-5 text-[15px] leading-relaxed outline-none placeholder:text-muted/60"
+            disabled={isListening || isTranscribing}
+            className="block w-full resize-none bg-transparent px-5 pb-14 pt-5 text-[15px] leading-relaxed outline-none placeholder:text-muted/60 disabled:opacity-70"
           />
 
           <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 pb-3">
             <div className="flex items-center gap-2">
-              {isSupported && (
+              {voiceSupported && (
                 <button
                   onClick={toggleVoice}
-                  className={`relative flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium transition-all ${
-                    isListening
+                  disabled={isTranscribing}
+                  className={`relative flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium transition-all disabled:opacity-70 ${
+                    isListening || isTranscribing
                       ? "bg-accent text-white"
                       : "bg-card-hover text-muted-foreground hover:text-foreground"
                   }`}
@@ -221,6 +183,11 @@ function PositionedInput({ onSubmit, onSkip }: PositionedInputProps) {
                     <>
                       <Square className="h-3 w-3" fill="currentColor" />
                       <VoiceWaveform />
+                    </>
+                  ) : isTranscribing ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Transcribing</span>
                     </>
                   ) : (
                     <>
@@ -263,8 +230,46 @@ function PositionedInput({ onSubmit, onSkip }: PositionedInputProps) {
           </div>
         </div>
 
+        {/* Voice status / error */}
+        <AnimatePresence mode="wait">
+          {voiceError ? (
+            <motion.p
+              key="voice-error"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2 }}
+              className="mt-3 text-[13px] text-rose-600 dark:text-rose-400"
+            >
+              {voiceError}
+            </motion.p>
+          ) : isListening ? (
+            <motion.p
+              key="voice-listening"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2 }}
+              className="mt-3 text-[13px] text-muted"
+            >
+              Listening... speak naturally.
+            </motion.p>
+          ) : isTranscribing ? (
+            <motion.p
+              key="voice-transcribing"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2 }}
+              className="mt-3 text-[13px] text-muted"
+            >
+              Transcribing your recording...
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
+
         {/* Example prompts */}
-        {!hasInput && !isListening && (
+        {!hasInput && !isListening && !isTranscribing && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -435,6 +440,7 @@ export function Questions({ variant, answers: initialAnswers, isPositioned, onCo
             {showPositionedInput ? (
               <PositionedInput
                 key="positioned-input"
+                variant={variant}
                 onSubmit={handlePositionedSubmit}
                 onSkip={handlePositionedSkip}
               />

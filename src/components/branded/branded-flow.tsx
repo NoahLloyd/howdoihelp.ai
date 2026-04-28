@@ -329,7 +329,7 @@ export function BrandedFlow({ brand }: { brand: BrandConfig }) {
   if (variant === "A") {
     return withBrand(
       <>
-        <ProfileStepV2 onSubmit={handleProfileSubmit} onSkip={handleProfileSkip} />
+        <ProfileStepV2 variant={variant} onSubmit={handleProfileSubmit} onSkip={handleProfileSkip} />
         {savedRecs && <SavedRecsLink onClick={handleViewSavedRecs} />}
       </>
     );
