@@ -77,7 +77,7 @@ cat > "$PLIST" <<PLIST
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>3</integer>
+        <integer>11</integer>
         <key>Minute</key>
         <integer>0</integer>
     </dict>
@@ -108,7 +108,9 @@ echo "   plist:   $PLIST"
 echo "   project: $PROJECT_DIR"
 echo "   log:     $LOG"
 echo
-echo "Schedule: every other day at 03:00 (daily fire + 47h floor inside the script)."
+echo "Schedule: launchd fires daily at 11:00."
+echo "  • gather + old-eval — runs every fire (fast, ~10-30 min)."
+echo "  • v2 reverify       — gated to once per ~7 days (slow, ~5-7h on subscription)."
 echo
 echo "Next steps:"
 echo "  1. Smoke test now (small): cd \"$PROJECT_DIR\" && CLAUDE_PROVIDER=cli npx tsx scripts/eval-cron/reverify.ts --force --limit 3"

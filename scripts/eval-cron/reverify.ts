@@ -28,9 +28,11 @@ import { createClient } from '@supabase/supabase-js';
 import { evaluatePipeline, type PipelineResult } from '../lib/evaluate-pipeline';
 import { closeBrowser } from '../lib/evaluate-stage2';
 
-// Schedule cadence: every other day. The launchd plist fires daily at 03:00,
-// and this floor (47h) ensures only every second daily fire actually runs.
-const MIN_RUN_INTERVAL_HOURS = 47;
+// Reverify is the slow part (~5-7h on the subscription CLI for ~900 rows),
+// so we run it WEEKLY, not every-other-day. The launchd plist fires daily
+// at 11:00 and run-all.ts always runs the gather phase, but reverify only
+// kicks in when this floor (~7 days) has passed since the last real run.
+const MIN_RUN_INTERVAL_HOURS = 167;
 const LAST_RUN_FILE = path.join(os.homedir(), '.howdoihelpai-eval-last-run');
 const REPORT_DIR = path.resolve(process.cwd(), '.context/eval-reports');
 const SCREENSHOT_DIR = path.resolve(process.cwd(), '.context/eval-reports/screenshots');

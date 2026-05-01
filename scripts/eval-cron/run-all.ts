@@ -25,9 +25,18 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
 import { spawn } from 'node:child_process';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 const PROJECT_DIR = path.resolve(__dirname, '..', '..');
+
+// launchd fires daily at 11:00; this floor ensures the heavy stuff (gather +
+// old eval + reverify check) actually runs every OTHER day, not every day.
+// Reverify has its own deeper floor (~7 days) inside reverify.ts so it only
+// kicks in once a week.
+const MIN_RUN_INTERVAL_HOURS = 47;
+const LAST_RUN_FILE = path.join(os.homedir(), '.howdoihelpai-run-all-last-run');
 
 interface Phase {
   name: string;
@@ -53,7 +62,28 @@ function parseArgs() {
   return {
     skipGather: args.includes('--skip-gather'),
     skipReverify: args.includes('--skip-reverify'),
+    force: args.includes('--force'),
   };
+}
+
+async function checkLastRun(force: boolean): Promise<void> {
+  if (force) return;
+  try {
+    const stat = await fs.stat(LAST_RUN_FILE);
+    const hoursAgo = (Date.now() - stat.mtimeMs) / 3_600_000;
+    if (hoursAgo < MIN_RUN_INTERVAL_HOURS) {
+      console.log(
+        `Skipping run-all: last full run was ${hoursAgo.toFixed(1)}h ago (< ${MIN_RUN_INTERVAL_HOURS}h floor). Use --force to override.`,
+      );
+      process.exit(0);
+    }
+  } catch {
+    // file missing — first run, OK
+  }
+}
+
+async function markRan(): Promise<void> {
+  await fs.writeFile(LAST_RUN_FILE, new Date().toISOString());
 }
 
 async function runPhase(phase: Phase): Promise<{ ok: boolean; durationSec: number }> {
@@ -77,13 +107,14 @@ async function runPhase(phase: Phase): Promise<{ ok: boolean; durationSec: numbe
 }
 
 async function main() {
-  const { skipGather, skipReverify } = parseArgs();
+  const { skipGather, skipReverify, force } = parseArgs();
+  await checkLastRun(force);
 
   console.log('═'.repeat(60));
   console.log(`  HOWDOIHELP.AI scheduled run — ${new Date().toISOString()}`);
   console.log(`  cwd:        ${PROJECT_DIR}`);
   console.log(`  gather:     ${skipGather ? 'SKIP' : 'on'}`);
-  console.log(`  reverify:   ${skipReverify ? 'SKIP' : 'on'}`);
+  console.log(`  reverify:   ${skipReverify ? 'SKIP (gated by its own 7-day floor when on)' : 'on'}`);
   console.log('═'.repeat(60));
 
   const summary: Array<{ name: string; ok: boolean; durationSec: number }> = [];
@@ -108,6 +139,7 @@ async function main() {
   }
   const failed = summary.filter(s => !s.ok).length;
   console.log(`\n  ${failed === 0 ? 'All phases ok.' : `${failed} phase(s) failed.`}`);
+  await markRan();
   process.exit(failed > 0 ? 1 : 0);
 }
 
