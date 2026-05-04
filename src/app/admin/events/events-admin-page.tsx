@@ -15,6 +15,13 @@ import {
 } from "@/app/admin/actions";
 import { ResourceEditor } from "@/components/admin/resource-editor";
 import { AdminPipelineSkeleton } from "@/components/ui/skeletons";
+import { VerificationBadge, TierFilterPills } from "@/components/admin/verification-badge";
+import {
+  classifyVerification,
+  matchesTierFilter,
+  type TierFilter,
+  DEFAULT_TIER_FILTER,
+} from "@/lib/verification-tiers";
 
 const PAGE_SIZE = 50;
 
@@ -30,6 +37,7 @@ export function EventsAdminPage() {
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [timeFilter, setTimeFilter] = useState("upcoming");
+  const [tierFilter, setTierFilter] = useState<TierFilter>(DEFAULT_TIER_FILTER);
   const [sortField, setSortField] = useState<"date_asc" | "date_desc" | "ev_desc" | "title">("date_asc");
   const [candidateStatusFilter, setCandidateStatusFilter] = useState("all");
 
@@ -119,6 +127,17 @@ export function EventsAdminPage() {
 
   const sources = useMemo(() => Array.from(new Set(resources.map(r => r.source_org || "Unknown"))).sort(), [resources]);
 
+  const tierCounts = useMemo(() => {
+    const enabledCounts = { all: resources.length, on: 0, off: 0 };
+    const byTier = { all: resources.length, verified: 0, flagged: 0, disabled: 0, unverified: 0 };
+    for (const r of resources) {
+      if (r.enabled) enabledCounts.on++; else enabledCounts.off++;
+      const t = classifyVerification(r.verification_notes).tier;
+      byTier[t]++;
+    }
+    return { enabled: enabledCounts, tier: byTier };
+  }, [resources]);
+
   const filtered = useMemo(() => {
     let res = resources;
 
@@ -127,7 +146,8 @@ export function EventsAdminPage() {
       res = res.filter(r =>
         r.title.toLowerCase().includes(q) ||
         r.location.toLowerCase().includes(q) ||
-        (r.description || "").toLowerCase().includes(q)
+        (r.description || "").toLowerCase().includes(q) ||
+        (r.verification_notes || "").toLowerCase().includes(q)
       );
     }
 
@@ -140,6 +160,8 @@ export function EventsAdminPage() {
     } else if (timeFilter === "past") {
       res = res.filter(r => r.event_date && new Date(r.event_date) < new Date(new Date().setHours(0, 0, 0, 0)));
     }
+
+    res = res.filter(r => matchesTierFilter(r, tierFilter));
 
     res.sort((a, b) => {
       if (sortField === "date_asc") {
@@ -158,7 +180,7 @@ export function EventsAdminPage() {
     });
 
     return res;
-  }, [resources, search, sourceFilter, timeFilter, sortField]);
+  }, [resources, search, sourceFilter, timeFilter, tierFilter, sortField]);
 
   const filteredCandidates = useMemo(() => {
     let res = candidates;
@@ -186,7 +208,7 @@ export function EventsAdminPage() {
   }, [candidates]);
 
   // Pagination
-  useEffect(() => { setPage(1); }, [search, sourceFilter, timeFilter, sortField, tab, candidateStatusFilter]);
+  useEffect(() => { setPage(1); }, [search, sourceFilter, timeFilter, tierFilter, sortField, tab, candidateStatusFilter]);
   const currentList = tab === "events" ? filtered : filteredCandidates;
   const totalPages = Math.ceil(currentList.length / PAGE_SIZE);
   const paged = tab === "events"
@@ -267,7 +289,7 @@ export function EventsAdminPage() {
               <div className="flex-1 relative">
                 <input
                   type="text"
-                  placeholder="Search event title, description, location..."
+                  placeholder="Search event title, description, location, verification notes..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full pl-3 pr-3 py-2 bg-background border border-border rounded-lg text-sm focus:border-accent outline-none"
@@ -289,6 +311,16 @@ export function EventsAdminPage() {
                 <option value="title">Sort: Title A-Z</option>
               </select>
             </div>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <TierFilterPills value={tierFilter} onChange={setTierFilter} counts={tierCounts} />
+              <button
+                onClick={() => setTierFilter({ enabled: "on", tier: "flagged", tag: "all" })}
+                className="px-3 py-1.5 text-xs font-medium border border-amber-500/30 text-amber-500 bg-amber-500/5 rounded-md hover:bg-amber-500/10 transition-colors cursor-pointer"
+                title="Show only enabled rows that the v2 pipeline flagged for manual review"
+              >
+                ⚐ Review queue ({tierCounts.tier.flagged})
+              </button>
+            </div>
           </div>
 
           {/* Data Table */}
@@ -301,6 +333,7 @@ export function EventsAdminPage() {
                     <th className="px-4 py-3 font-medium">Date</th>
                     <th className="px-4 py-3 font-medium">Event Details</th>
                     <th className="px-4 py-3 font-medium">Location</th>
+                    <th className="px-4 py-3 font-medium">Verification</th>
                     <th className="px-4 py-3 font-medium text-right">Metrics</th>
                   </tr>
                 </thead>
@@ -340,6 +373,9 @@ export function EventsAdminPage() {
                         <td className="px-4 py-3 w-40">
                           <span className="text-xs bg-muted/30 px-2 py-1 rounded text-foreground">{r.location || "TBD"}</span>
                         </td>
+                        <td className="px-4 py-3 w-44">
+                          <VerificationBadge notes={r.verification_notes} />
+                        </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex flex-col items-end gap-0.5">
                             <div className="text-[11px] font-mono"><span className="text-muted">EV:</span> {(r.ev_general || 0).toFixed(2)}</div>
@@ -351,7 +387,7 @@ export function EventsAdminPage() {
                   })}
                   {paged.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-12 text-center text-muted font-mono text-sm">
+                      <td colSpan={6} className="px-4 py-12 text-center text-muted font-mono text-sm">
                         No events found matching filters.
                       </td>
                     </tr>

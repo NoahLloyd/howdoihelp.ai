@@ -15,6 +15,13 @@ import {
 } from "@/app/admin/actions";
 import { ResourceEditor } from "@/components/admin/resource-editor";
 import { AdminPipelineSkeleton } from "@/components/ui/skeletons";
+import { VerificationBadge, TierFilterPills } from "@/components/admin/verification-badge";
+import {
+  classifyVerification,
+  matchesTierFilter,
+  type TierFilter,
+  DEFAULT_TIER_FILTER,
+} from "@/lib/verification-tiers";
 
 const PAGE_SIZE = 50;
 
@@ -31,6 +38,7 @@ export function CommunitiesAdminPage() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [healthFilter, setHealthFilter] = useState("all");
+  const [tierFilter, setTierFilter] = useState<TierFilter>(DEFAULT_TIER_FILTER);
   const [sortField, setSortField] = useState<"title" | "activity" | "created">("title");
   const [candidateStatusFilter, setCandidateStatusFilter] = useState("all");
 
@@ -120,6 +128,19 @@ export function CommunitiesAdminPage() {
 
   const sources = useMemo(() => Array.from(new Set(resources.map(r => r.source_org || "Unknown"))).sort(), [resources]);
 
+  // Counts for the tier filter pills (independent of other filters so the
+  // numbers don't shift when you change them).
+  const tierCounts = useMemo(() => {
+    const enabledCounts = { all: resources.length, on: 0, off: 0 };
+    const tierCounts = { all: resources.length, verified: 0, flagged: 0, disabled: 0, unverified: 0 };
+    for (const r of resources) {
+      if (r.enabled) enabledCounts.on++; else enabledCounts.off++;
+      const t = classifyVerification(r.verification_notes).tier;
+      tierCounts[t]++;
+    }
+    return { enabled: enabledCounts, tier: tierCounts };
+  }, [resources]);
+
   const filtered = useMemo(() => {
     let res = resources;
 
@@ -129,7 +150,8 @@ export function CommunitiesAdminPage() {
         r.title.toLowerCase().includes(q) ||
         r.location.toLowerCase().includes(q) ||
         (r.description || "").toLowerCase().includes(q) ||
-        (r.url || "").toLowerCase().includes(q)
+        (r.url || "").toLowerCase().includes(q) ||
+        (r.verification_notes || "").toLowerCase().includes(q)
       );
     }
 
@@ -147,6 +169,8 @@ export function CommunitiesAdminPage() {
       res = res.filter(r => (r.activity_score ?? 0.5) < 0.2);
     }
 
+    res = res.filter(r => matchesTierFilter(r, tierFilter));
+
     res.sort((a, b) => {
       if (sortField === "title") return a.title.localeCompare(b.title);
       if (sortField === "activity") return (b.activity_score ?? 0.5) - (a.activity_score ?? 0.5);
@@ -155,7 +179,7 @@ export function CommunitiesAdminPage() {
     });
 
     return res;
-  }, [resources, search, sourceFilter, statusFilter, healthFilter, sortField]);
+  }, [resources, search, sourceFilter, statusFilter, healthFilter, tierFilter, sortField]);
 
   const filteredCandidates = useMemo(() => {
     let res = candidates;
@@ -183,7 +207,7 @@ export function CommunitiesAdminPage() {
   }, [candidates]);
 
   // Pagination
-  useEffect(() => { setPage(1); }, [search, sourceFilter, statusFilter, healthFilter, sortField, tab, candidateStatusFilter]);
+  useEffect(() => { setPage(1); }, [search, sourceFilter, statusFilter, healthFilter, tierFilter, sortField, tab, candidateStatusFilter]);
   const currentListLength = tab === "communities" ? filtered.length : filteredCandidates.length;
   const totalPages = Math.ceil(currentListLength / PAGE_SIZE);
   const pagedResources = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -265,7 +289,7 @@ export function CommunitiesAdminPage() {
               <div className="flex-1 relative">
                  <input
                    type="text"
-                   placeholder="Search title, description, URL, location..."
+                   placeholder="Search title, description, URL, location, verification notes..."
                    value={search}
                    onChange={(e) => setSearch(e.target.value)}
                    className="w-full pl-3 pr-3 py-2 bg-background border border-border rounded-lg text-sm focus:border-accent outline-none"
@@ -293,6 +317,16 @@ export function CommunitiesAdminPage() {
                 <option value="created">Sort: Newest Added</option>
               </select>
             </div>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <TierFilterPills value={tierFilter} onChange={setTierFilter} counts={tierCounts} />
+              <button
+                onClick={() => setTierFilter({ enabled: "on", tier: "flagged", tag: "all" })}
+                className="px-3 py-1.5 text-xs font-medium border border-amber-500/30 text-amber-500 bg-amber-500/5 rounded-md hover:bg-amber-500/10 transition-colors cursor-pointer"
+                title="Show only enabled rows that the v2 pipeline flagged for manual review"
+              >
+                ⚐ Review queue ({tierCounts.tier.flagged})
+              </button>
+            </div>
           </div>
 
           <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -304,6 +338,7 @@ export function CommunitiesAdminPage() {
                     <th className="px-4 py-3 font-medium">Community</th>
                     <th className="px-4 py-3 font-medium">Location</th>
                     <th className="px-4 py-3 font-medium">Source</th>
+                    <th className="px-4 py-3 font-medium">Verification</th>
                     <th className="px-4 py-3 font-medium">Health</th>
                   </tr>
                 </thead>
@@ -333,6 +368,9 @@ export function CommunitiesAdminPage() {
                           <span className="text-xs bg-muted/30 px-2 py-1 rounded text-foreground">{r.location || "Global"}</span>
                         </td>
                         <td className="px-4 py-3 text-xs text-muted w-32">{r.source_org}</td>
+                        <td className="px-4 py-3 w-44">
+                          <VerificationBadge notes={r.verification_notes} />
+                        </td>
                         <td className="px-4 py-3 w-32">
                           <div className="flex flex-col gap-1 text-xs">
                             <div className="flex items-center gap-1.5">
@@ -349,7 +387,7 @@ export function CommunitiesAdminPage() {
                   })}
                   {pagedResources.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-12 text-center text-muted font-mono text-sm">
+                      <td colSpan={6} className="px-4 py-12 text-center text-muted font-mono text-sm">
                         No communities found matching filters.
                       </td>
                     </tr>
