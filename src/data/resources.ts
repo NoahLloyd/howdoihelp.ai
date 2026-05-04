@@ -125,40 +125,6 @@ export const resources: Resource[] = [
     created_at: "2026-02-19T00:00:00Z",
   },
 
-  // ─── Events ───────────────────────────────────────────────
-  {
-    id: "aisafety-events",
-    title: "Attend an AI safety event near you",
-    description:
-      "Workshops, talks, and meetups happening around the world.",
-    url: "https://www.aisafety.com/events-and-training",
-    source_org: "AI Safety",
-    category: "events",
-    location: "Global",
-    min_minutes: 120,
-    ev_general: 0.4,
-    friction: 0.2,
-    enabled: true,
-    status: "approved",
-    created_at: "2026-02-19T00:00:00Z",
-  },
-  {
-    id: "organize-event",
-    title: "Organize an AI safety event",
-    description:
-      "Host a reading group, film screening, or discussion in your area. PauseAI has guides to help.",
-    url: "https://pauseai.info/organizing",
-    source_org: "PauseAI",
-    category: "events",
-    location: "Global",
-    min_minutes: 300,
-    ev_general: 0.6,
-    friction: 0.5,
-    enabled: true,
-    status: "approved",
-    created_at: "2026-02-19T00:00:00Z",
-  },
-
   // ─── Programs ─────────────────────────────────────────────
   {
     id: "bluedot-fundamentals",
