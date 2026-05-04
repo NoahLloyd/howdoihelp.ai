@@ -7,6 +7,7 @@ import type { Resource } from "@/types";
 import { getGeoData } from "@/lib/geo";
 import { SubmitForm } from "./submit-form";
 import { CATEGORIES } from "@/lib/categories";
+import { locationRelevance } from "@/lib/geo-region";
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -35,28 +36,7 @@ function geoRelevance(
   userRegion?: string,
   userCountry?: string
 ): number {
-  if (!userCountry) return 0;
-
-  const loc = location.toLowerCase();
-  const country = userCountry.toLowerCase();
-
-  // Exact city match → strongest signal
-  if (userCity && loc.includes(userCity.toLowerCase())) return 100;
-
-  // Region/state match
-  if (userRegion && loc.includes(userRegion.toLowerCase())) return 80;
-
-  // Country match
-  if (loc.includes(country)) return 60;
-
-  // Country code patterns (2-letter at end, e.g. "Berlin, DE")
-  // handled implicitly by country name match above
-
-  // Online communities are always somewhat relevant
-  if (location === "Online") return 20;
-  if (location === "Global") return 10;
-
-  return 0;
+  return locationRelevance(location, userCity, userRegion, userCountry);
 }
 
 // ─── Custom Location Dropdown ───────────────────────────────
