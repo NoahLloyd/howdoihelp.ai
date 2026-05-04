@@ -143,7 +143,11 @@ function extractAuthWalled(reportText: string): AuthWalledRow[] {
 let _browser: Browser | null = null;
 async function getBrowser(): Promise<Browser> {
   if (!_browser) {
-    _browser = await chromium.launch({ headless: true });
+    const opts: Parameters<typeof chromium.launch>[0] = { headless: true };
+    if (process.env.PLAYWRIGHT_EXECUTABLE_PATH) {
+      opts.executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH;
+    }
+    _browser = await chromium.launch(opts);
   }
   return _browser;
 }

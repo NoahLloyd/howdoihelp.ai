@@ -37,7 +37,14 @@ const STAGE2_OUTPUT_SCHEMA = {
 let _browser: Browser | null = null;
 async function browser(): Promise<Browser> {
   if (!_browser) {
-    _browser = await chromium.launch({ headless: true });
+    // PLAYWRIGHT_EXECUTABLE_PATH lets us point at a system-installed
+    // Chromium when Playwright doesn't have prebuilt binaries for the
+    // host OS (e.g. Ubuntu 26.04 at the time of writing).
+    const opts: Parameters<typeof chromium.launch>[0] = { headless: true };
+    if (process.env.PLAYWRIGHT_EXECUTABLE_PATH) {
+      opts.executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH;
+    }
+    _browser = await chromium.launch(opts);
   }
   return _browser;
 }
