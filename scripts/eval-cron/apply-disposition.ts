@@ -13,6 +13,11 @@
  *
  * Default is DRY-RUN. --apply is required to actually mutate the DB.
  *
+ * SAFETY: --apply aborts if more than `--max-disables N` rows would
+ * transition from enabled=true to enabled=false in this run (default 100).
+ * This guards against a regressed v2 pipeline (e.g. all-render-failed) from
+ * nuking the directory in one go.
+ *
  * Disposition tags written to verification_notes:
  *   v2-accept              - boost: activity_score=1.0
  *   v2-policy-keep         - keep: activity_score=0.85
@@ -361,8 +366,13 @@ async function main() {
   const apply = argv.includes('--apply');
   const filterIdx = argv.indexOf('--filter');
   const filter = filterIdx >= 0 ? argv[filterIdx + 1] : '';
+  const maxDisablesIdx = argv.indexOf('--max-disables');
+  const maxDisables = maxDisablesIdx >= 0
+    ? (parseInt(argv[maxDisablesIdx + 1] || '0', 10) || 100)
+    : 100;
+  const force = argv.includes('--force');
 
-  console.log(`Mode: ${apply ? 'APPLY' : 'DRY-RUN'}`);
+  console.log(`Mode: ${apply ? 'APPLY' : 'DRY-RUN'}  (max new disables: ${maxDisables}${force ? ', --force overrides' : ''})`);
   console.log('');
 
   // Load latest artifacts
@@ -453,6 +463,25 @@ async function main() {
   for (const p of showSample) {
     const fields = p.changes.map(c => `${c.field}: ${JSON.stringify(c.before)} → ${JSON.stringify(c.after)}`).join('; ');
     console.log(`  [${p.disposition.tag}] ${p.current.title?.slice(0, 40) || p.current.id} | ${fields}`);
+  }
+
+  // Safety: count NEW disables (rows currently enabled=true that would flip
+  // to enabled=false). The directory has churned through one full cleanup
+  // already; subsequent runs should produce small deltas. A big jump means
+  // the v2 pipeline likely regressed.
+  let newDisables = 0;
+  for (const p of planned) {
+    if (p.current.enabled && !p.disposition.enabled) newDisables++;
+  }
+  console.log(`\nNew disables (currently-enabled rows that would be disabled): ${newDisables}`);
+
+  if (apply && newDisables > maxDisables && !force) {
+    console.error(
+      `\n⛔ ABORT: would disable ${newDisables} currently-enabled rows, exceeds --max-disables=${maxDisables}.\n` +
+      `   Re-run with --max-disables ${newDisables + 50} or --force to override.\n` +
+      `   Most likely cause: a v2 pipeline regression. Inspect the latest reverify report first.`,
+    );
+    process.exit(2);
   }
 
   // Apply

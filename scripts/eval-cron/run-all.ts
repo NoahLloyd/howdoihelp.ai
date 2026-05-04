@@ -56,6 +56,11 @@ const PHASES: Phase[] = [
   // v2 reverify on already-promoted resources. Uses CLAUDE_PROVIDER=cli so it
   // runs on the user's Claude Code subscription instead of the paid API.
   { name: 'v2:       reverify',              cmd: ['npx', 'tsx', 'scripts/eval-cron/reverify.ts'],   useCli: true  },
+  // Post-reverify: classify EA/LW activity, mine other-reject reasoning,
+  // probe auth-walled liveness, and apply the dispositions to the DB. The
+  // driver is a no-op unless reverify produced a fresh report this cycle,
+  // so this is cheap on most fires.
+  { name: 'v2:       post-reverify',         cmd: ['npx', 'tsx', 'scripts/eval-cron/post-reverify.ts'], useCli: true  },
 ];
 
 function parseArgs() {
