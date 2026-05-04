@@ -31,10 +31,11 @@ import * as path from 'node:path';
 
 const PROJECT_DIR = path.resolve(__dirname, '..', '..');
 
-// launchd fires daily at 11:00; this floor ensures the heavy stuff (gather +
-// old eval + reverify check) actually runs every OTHER day, not every day.
-// Reverify has its own deeper floor (~7 days) inside reverify.ts so it only
-// kicks in once a week.
+// launchd fires daily at 11:00. We use internal floors so the heavy work
+// runs on the cadence we actually want:
+//   - gather + v1 eval (events/comms/programs): every 2 days (47h floor here)
+//   - v2 reverify on already-promoted resources: monthly (~30d floor inside
+//     reverify.ts itself, since the directory is now in good shape).
 const MIN_RUN_INTERVAL_HOURS = 47;
 const LAST_RUN_FILE = path.join(os.homedir(), '.howdoihelpai-run-all-last-run');
 
