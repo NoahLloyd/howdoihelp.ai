@@ -38,14 +38,14 @@ const RUNNERS: Record<string, RunnerFn> = {
     await runGatherMeetup({ dryRun: mode === "dry-run" });
   },
 
-  // Event pipeline - evaluate
+  // Event pipeline - evaluate (v2 picks models internally — Haiku stage 1,
+  // Sonnet stage 2, Sonnet metadata; the legacy `model` query param is ignored)
   "evaluate": async (mode, searchParams) => {
     const evalUrl = searchParams.get("url");
-    const model = searchParams.get("model") || undefined;
     if (evalUrl) {
-      await runEvaluateEvent({ url: evalUrl, model });
+      await runEvaluateEvent({ url: evalUrl });
     } else {
-      await runEvaluateEvent({ processQueue: true, model });
+      await runEvaluateEvent({ processQueue: true });
     }
   },
 
@@ -62,11 +62,10 @@ const RUNNERS: Record<string, RunnerFn> = {
   },
   "evaluate-community": async (mode, searchParams) => {
     const evalUrl = searchParams.get("url");
-    const model = searchParams.get("model") || undefined;
     if (evalUrl) {
-      await runEvaluateCommunity({ url: evalUrl, model });
+      await runEvaluateCommunity({ url: evalUrl });
     } else {
-      await runEvaluateCommunity({ processQueue: true, model });
+      await runEvaluateCommunity({ processQueue: true });
     }
   },
   "sync-all-communities": async (mode) => {

@@ -1,44 +1,46 @@
 /**
- * evaluate-event.ts - The central AI event evaluator.
+ * evaluate-event.ts - The single gatekeeper for the event candidate pipeline.
  *
- * This is the single gatekeeper for the entire event pipeline. Nothing enters
- * the public `resources` table without passing through this script.
+ * As of v2, this script chains:
+ *   1. The v2 pipeline (stage 1 Haiku text → stage 2 Sonnet vision when needed)
+ *      to decide accept / reject. Same gate that the monthly reverify uses,
+ *      so new candidates and existing rows are judged the same way.
+ *   2. A metadata extractor (Sonnet) that runs only on accept and produces
+ *      clean_title, clean_description, suggested_ev, suggested_friction,
+ *      duplicate_of, etc. — the fields the directory needs for ranking and
+ *      display.
+ *
+ * Both calls go through CLAUDE_PROVIDER=cli (subscription) — zero $/run.
  *
  * Usage:
- *   # Evaluate a single URL (creates candidate + evaluates + optionally promotes)
- *   npx tsx scripts/evaluate-event.ts --url "https://lu.ma/ai-safety-hackathon"
- *
- *   # Evaluate from title/description (no URL scraping)
- *   npx tsx scripts/evaluate-event.ts --title "AI Safety Unconference" --description "..." --date "2026-03-15"
- *
  *   # Process all pending candidates in the queue
  *   npx tsx scripts/evaluate-event.ts --process-queue
  *
  *   # Re-evaluate already-processed candidates
  *   npx tsx scripts/evaluate-event.ts --process-queue --force
+ *
+ *   # Evaluate a single URL (creates candidate + evaluates + optionally promotes)
+ *   npx tsx scripts/evaluate-event.ts --url "https://lu.ma/ai-safety-hackathon"
+ *
+ *   # Evaluate from title/description (no URL scraping)
+ *   npx tsx scripts/evaluate-event.ts --title "AI Safety Unconference" --description "..." --date "2026-03-15"
  */
 
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
-import Anthropic from '@anthropic-ai/sdk';
-import { scrapeUrl } from './lib/scrape-url';
 import { getSupabase, insertCandidates } from './lib/insert-candidates';
 import { preFilter } from './lib/pre-filter';
 import { estimateEventMinutes } from './lib/estimate-time';
-import { getActivePrompt, interpolateTemplate } from '../src/lib/prompts';
+import { evaluatePipeline, type PipelineResult } from './lib/evaluate-pipeline';
+import { closeBrowser } from './lib/evaluate-stage2';
+import {
+  extractEventMetadata,
+  type EventMetadata,
+  type ExistingCandidate,
+} from './lib/evaluate-candidate-metadata';
 
 // ─── Config (lazy init for serverless compatibility) ────────
-
-let _anthropic: Anthropic | null = null;
-function getAnthropicClient(): Anthropic {
-  if (!_anthropic) {
-    const key = process.env.ANTHROPIC_API_KEY;
-    if (!key) throw new Error('Missing ANTHROPIC_API_KEY');
-    _anthropic = new Anthropic({ apiKey: key });
-  }
-  return _anthropic;
-}
 
 let _supabase: ReturnType<typeof getSupabase> | null = null;
 function getDb() {
@@ -46,144 +48,56 @@ function getDb() {
   return _supabase;
 }
 
-// Thresholds for auto-promote / auto-reject
-const AUTO_PROMOTE_THRESHOLD = 0.6;
-const AUTO_REJECT_THRESHOLD = 0.3;
+// Minimum suggested_ev to auto-promote. v2 already gated on accept/reject;
+// this is just a "we accept it but is it valuable enough to surface?" cutoff.
+const AUTO_PROMOTE_EV_THRESHOLD = 0.35;
 
-// ─── AI Evaluation ─────────────────────────────────────────
+// ─── Combined evaluation ────────────────────────────────────
 
-interface AIEvaluation {
-  is_real_event: boolean;
-  is_relevant: boolean;
-  relevance_score: number;
-  impact_score: number;
-  suggested_ev: number;
-  suggested_friction: number;
-  event_type: string;
-  clean_title: string;
-  clean_description: string;
-  event_date: string | null;
-  event_end_date: string | null;
-  event_time: string | null;
-  location: string;
-  is_online: boolean;
-  organization: string;
-  duplicate_of: string | null;
-  reasoning: string;
+interface CombinedEvaluation {
+  /** Final accept/reject from v2 pipeline. */
+  verdict: 'accept' | 'reject';
+  /** v2 details (always present). */
+  pipeline: PipelineResult;
+  /** Metadata only present when verdict === 'accept'. */
+  metadata: EventMetadata | null;
 }
 
-interface ExistingEvent {
-  id: string;
-  title: string;
-  event_date: string | null;
-  location: string | null;
-  organization: string | null;
+async function evaluateCandidateEnd2End(args: {
   url: string;
+  candidate: { title?: string; description?: string; date?: string; location?: string; source?: string };
+  existing: ExistingCandidate[];
+}): Promise<CombinedEvaluation> {
+  const pipeline = await evaluatePipeline(args.url, 'event');
+
+  if (pipeline.finalVerdict === 'reject') {
+    return { verdict: 'reject', pipeline, metadata: null };
+  }
+
+  const metadata = await extractEventMetadata({
+    url: args.url,
+    scrape: pipeline.scrape,
+    candidate: args.candidate,
+    existing: args.existing,
+  });
+  return { verdict: 'accept', pipeline, metadata };
 }
 
-async function evaluateWithAI(
-  title: string,
-  url: string,
-  scrapedText: string,
-  metadata: {
-    description?: string;
-    date?: string;
-    location?: string;
-    source?: string;
-  },
-  existingEvents: ExistingEvent[] = [],
-  modelOverride?: string,
-): Promise<AIEvaluation> {
-  // Build template variables
-  const scrapedTextVar = `Evaluate this event candidate:
-
-<event>
-Title: ${title}
-URL: ${url}
-Claimed date: ${metadata.date || 'Unknown'}
-Claimed location: ${metadata.location || 'Unknown'}
-Source platform: ${metadata.source || 'Unknown'}
-Provided description: ${metadata.description || 'None'}
-</event>
-
-<scraped_page_content>
-${scrapedText || '[Page could not be scraped]'}
-</scraped_page_content>`;
-
-  let existingEventsVar = '';
-  if (existingEvents.length > 0) {
-    const lines = existingEvents.map(e =>
-      `[${e.id}] "${e.title}" | ${e.event_date || 'no date'} | ${e.location || 'unknown'} | ${e.organization || 'unknown'} | ${e.url}`
-    );
-    existingEventsVar = `<existing_events>
-Check if this candidate is a duplicate of any of these existing events. If so, set duplicate_of to the matching event's ID.
-
-${lines.join('\n')}
-</existing_events>`;
-  }
-
-  const activePrompt = await getActivePrompt("evaluate-event");
-  const fullPrompt = interpolateTemplate(activePrompt.content, {
-    scraped_text: scrapedTextVar,
-    existing_events: existingEventsVar,
-  });
-
-  const model = modelOverride || process.env.EVAL_MODEL || activePrompt.model || 'claude-haiku-4-5-20251001';
-  console.log(`  Using model: ${model}`);
-
-  const response = await getAnthropicClient().messages.create({
-    model,
-    max_tokens: 1024,
-    messages: [
-      { role: 'user', content: fullPrompt },
-    ],
-  });
-
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
-
-  // Parse JSON from response, handling possible markdown fences
-  let jsonStr = text.trim();
-  if (jsonStr.startsWith('```')) {
-    jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-  }
-
-  try {
-    const parsed = JSON.parse(jsonStr);
-    return {
-      is_real_event: Boolean(parsed.is_real_event),
-      is_relevant: Boolean(parsed.is_relevant),
-      relevance_score: clamp(Number(parsed.relevance_score) || 0),
-      impact_score: clamp(Number(parsed.impact_score) || 0),
-      suggested_ev: clamp(Number(parsed.suggested_ev) || 0),
-      suggested_friction: clamp(Number(parsed.suggested_friction) || 0),
-      event_type: parsed.event_type || 'other',
-      clean_title: parsed.clean_title || title,
-      clean_description: parsed.clean_description || '',
-      event_date: parsed.event_date || null,
-      event_end_date: parsed.event_end_date || null,
-      event_time: parsed.event_time || null,
-      location: parsed.location || 'Unknown',
-      is_online: Boolean(parsed.is_online),
-      organization: parsed.organization || '',
-      duplicate_of: parsed.duplicate_of || null,
-      reasoning: parsed.reasoning || '',
-    };
-  } catch (err) {
-    console.error('Failed to parse AI response:', text.slice(0, 200));
-    throw new Error('AI returned invalid JSON');
-  }
-}
-
-function clamp(n: number, min = 0, max = 1): number {
-  return Math.max(min, Math.min(max, n));
+function combinedReasoning(c: CombinedEvaluation): string {
+  const lines = [
+    `[v2 ${c.pipeline.decidedAt} ${c.pipeline.finalVerdict}, conf ${(c.pipeline.stage2?.confidence ?? c.pipeline.stage1.confidence).toFixed(2)}]`,
+    c.pipeline.stage1.reasoning,
+  ];
+  if (c.pipeline.stage2) lines.push(`stage2: ${c.pipeline.stage2.reasoning}`);
+  if (c.metadata) lines.push(`metadata: ${c.metadata.reasoning}`);
+  return lines.filter(Boolean).join(' | ').slice(0, 4000);
 }
 
 // ─── Existing Events (for dedup) ────────────────────────────
 
-async function fetchExistingEvents(): Promise<ExistingEvent[]> {
-  const events: ExistingEvent[] = [];
+async function fetchExistingEvents(): Promise<ExistingCandidate[]> {
+  const events: ExistingCandidate[] = [];
 
-  // Fetch live resources (promoted events)
   const { data: resources } = await getDb()
     .from('resources')
     .select('id, title, event_date, location, source_org, url')
@@ -201,7 +115,6 @@ async function fetchExistingEvents(): Promise<ExistingEvent[]> {
     });
   }
 
-  // Fetch already-evaluated/promoted candidates (not yet in resources, or recently processed)
   const { data: candidates } = await getDb()
     .from('event_candidates')
     .select('id, title, event_date, location, ai_organization, url')
@@ -209,7 +122,6 @@ async function fetchExistingEvents(): Promise<ExistingEvent[]> {
     .limit(300);
 
   for (const c of candidates || []) {
-    // Skip if we already have this ID from resources
     if (events.some(e => e.id === c.id)) continue;
     events.push({
       id: c.id,
@@ -224,10 +136,13 @@ async function fetchExistingEvents(): Promise<ExistingEvent[]> {
   return events;
 }
 
-// ─── Candidate Processing ──────────────────────────────────
+// ─── Candidate processing ──────────────────────────────────
 
-async function evaluateCandidate(candidateId: string, force = false, existingEvents?: ExistingEvent[], modelOverride?: string): Promise<'promoted' | 'rejected' | 'evaluated' | 'skipped' | 'error'> {
-  // Fetch the candidate
+async function evaluateCandidate(
+  candidateId: string,
+  force = false,
+  existingEvents?: ExistingCandidate[],
+): Promise<'promoted' | 'rejected' | 'evaluated' | 'skipped' | 'error'> {
   const { data: candidate, error } = await getDb()
     .from('event_candidates')
     .select('*')
@@ -239,171 +154,169 @@ async function evaluateCandidate(candidateId: string, force = false, existingEve
     return 'error';
   }
 
-  // Skip if already processed (unless forced)
   if (!force && candidate.status !== 'pending') {
     return 'skipped';
   }
 
-  console.log(`  Evaluating: "${candidate.title}"`);
-
-  // Step 1: Scrape the URL for context
-  let scrapedText = candidate.scraped_text || '';
-  let scrapedMeta: { date?: string; location?: string; description?: string } = {};
-
-  if (!scrapedText && candidate.url) {
-    const scraped = await scrapeUrl(candidate.url);
-    scrapedText = scraped.text;
-    scrapedMeta = {
-      date: scraped.date || candidate.event_date,
-      location: scraped.location || candidate.location,
-      description: scraped.description || candidate.description,
-    };
-
-    // Save scraped text so we don't re-scrape
+  if (!candidate.url) {
     await getDb()
       .from('event_candidates')
-      .update({ scraped_text: scrapedText })
+      .update({ status: 'rejected', ai_reasoning: 'No URL — cannot evaluate', processed_at: new Date().toISOString() })
       .eq('id', candidateId);
-  } else {
-    scrapedMeta = {
-      date: candidate.event_date,
-      location: candidate.location,
-      description: candidate.description,
-    };
+    return 'rejected';
   }
 
-  // Step 2: Fetch existing events for dedup (reuse if provided)
+  console.log(`  Evaluating: "${candidate.title}"`);
+
   if (!existingEvents) {
     existingEvents = await fetchExistingEvents();
   }
 
-  // Step 3: Call Claude for evaluation
-  let evaluation: AIEvaluation;
+  let evalResult: CombinedEvaluation;
   try {
-    evaluation = await evaluateWithAI(
-      candidate.title,
-      candidate.url,
-      scrapedText,
-      { ...scrapedMeta, source: candidate.source },
-      existingEvents,
-      modelOverride,
-    );
+    evalResult = await evaluateCandidateEnd2End({
+      url: candidate.url,
+      candidate: {
+        title: candidate.title,
+        description: candidate.description,
+        date: candidate.event_date,
+        location: candidate.location,
+        source: candidate.source,
+      },
+      existing: existingEvents,
+    });
   } catch (err: any) {
-    console.error(`  AI evaluation failed for "${candidate.title}":`, err.message);
+    console.error(`  v2 evaluation failed for "${candidate.title}":`, err.message);
     return 'error';
   }
 
-  // Step 4: Store AI results - always use AI's standardized date/location
-  await getDb()
-    .from('event_candidates')
-    .update({
-      ai_is_real_event: evaluation.is_real_event,
-      ai_is_relevant: evaluation.is_relevant,
-      ai_relevance_score: evaluation.relevance_score,
-      ai_impact_score: evaluation.impact_score,
-      ai_suggested_ev: evaluation.suggested_ev,
-      ai_suggested_friction: evaluation.suggested_friction,
-      ai_event_type: evaluation.event_type,
-      ai_summary: evaluation.clean_description,
-      ai_reasoning: evaluation.reasoning,
-      ai_organization: evaluation.organization,
-      ai_is_online: evaluation.is_online,
-      duplicate_of: evaluation.duplicate_of,
-      processed_at: new Date().toISOString(),
-      // Always prefer AI's standardized date/location over raw gatherer data
-      event_date: evaluation.event_date || candidate.event_date,
-      event_end_date: evaluation.event_end_date || candidate.event_end_date,
-      event_time: evaluation.event_time,
-      location: evaluation.location || candidate.location,
-    })
-    .eq('id', candidateId);
+  const reasoning = combinedReasoning(evalResult);
+  const metadata = evalResult.metadata;
+  const stage1 = evalResult.pipeline.stage1;
+  const stage2 = evalResult.pipeline.stage2;
+  const verdictConf = stage2?.confidence ?? stage1.confidence;
 
-  // Step 5: Decide fate
+  // Persist evaluation to candidate row. Backfill old "ai_*" column names so
+  // the admin UI keeps working without schema changes.
+  const updateBase: Record<string, unknown> = {
+    ai_is_real_event: stage1.is_alive,
+    ai_is_relevant: evalResult.verdict === 'accept' && stage1.is_on_topic,
+    ai_relevance_score: verdictConf,
+    ai_impact_score: metadata?.impact_score ?? null,
+    ai_suggested_ev: metadata?.suggested_ev ?? null,
+    ai_suggested_friction: metadata?.suggested_friction ?? null,
+    ai_event_type: metadata?.event_type ?? null,
+    ai_summary: metadata?.clean_description ?? null,
+    ai_reasoning: reasoning,
+    ai_organization: metadata?.organization ?? null,
+    ai_is_online: metadata?.is_online ?? null,
+    duplicate_of: metadata?.duplicate_of ?? null,
+    processed_at: new Date().toISOString(),
+    event_date: metadata?.event_date || candidate.event_date,
+    event_end_date: metadata?.event_end_date || candidate.event_end_date,
+    event_time: metadata?.event_time ?? null,
+    location: metadata?.location || candidate.location,
+  };
+  await getDb().from('event_candidates').update(updateBase).eq('id', candidateId);
 
-  // Check for duplicate first
-  if (evaluation.duplicate_of) {
-    await getDb()
-      .from('event_candidates')
-      .update({ status: 'rejected', ai_reasoning: `Duplicate of ${evaluation.duplicate_of}. ${evaluation.reasoning}` })
-      .eq('id', candidateId);
-    console.log(`  🔁 Duplicate: "${candidate.title}" → duplicate of ${evaluation.duplicate_of}`);
-    return 'rejected';
-  }
-
-  if (!evaluation.is_real_event || !evaluation.is_relevant || evaluation.relevance_score < AUTO_REJECT_THRESHOLD) {
+  if (evalResult.verdict === 'reject') {
     await getDb()
       .from('event_candidates')
       .update({ status: 'rejected' })
       .eq('id', candidateId);
-    console.log(`  ❌ Rejected: "${candidate.title}" (real=${evaluation.is_real_event}, relevant=${evaluation.is_relevant}, score=${evaluation.relevance_score.toFixed(2)})`);
+    console.log(`  ❌ Rejected: "${candidate.title}" (${evalResult.pipeline.decidedAt}, conf ${verdictConf.toFixed(2)})`);
     return 'rejected';
   }
 
-  if (evaluation.is_real_event && evaluation.is_relevant && evaluation.relevance_score >= AUTO_PROMOTE_THRESHOLD) {
-    // Auto-promote
-    const resourceId = await promoteToResources(candidateId, candidate, evaluation);
+  // accept path — we have metadata
+  if (metadata!.duplicate_of) {
+    // If this candidate is already promoted, dedup typically matches itself
+    // or its own resource — don't downgrade it.
+    if (candidate.status === 'promoted') {
+      console.log(`  ✓ Already promoted; dedup match (${metadata!.duplicate_of}) ignored`);
+      return 'promoted';
+    }
+    await getDb()
+      .from('event_candidates')
+      .update({
+        status: 'rejected',
+        ai_reasoning: `Duplicate of ${metadata!.duplicate_of}. ${reasoning}`,
+      })
+      .eq('id', candidateId);
+    console.log(`  🔁 Duplicate: "${candidate.title}" → ${metadata!.duplicate_of}`);
+    return 'rejected';
+  }
+
+  if (metadata!.suggested_ev >= AUTO_PROMOTE_EV_THRESHOLD) {
+    // Avoid re-promoting an already-promoted candidate (would create a duplicate
+    // row in resources). On --force we still updated the metadata above; just
+    // skip the second insert.
+    if (candidate.status === 'promoted' && candidate.promoted_resource_id) {
+      console.log(`  ✓ Already promoted: "${metadata!.clean_title}" → ${candidate.promoted_resource_id} (metadata refreshed)`);
+      return 'promoted';
+    }
+    const resourceId = await promoteToResources(candidateId, candidate, metadata!);
     if (resourceId) {
-      console.log(`  ✅ Promoted: "${evaluation.clean_title}" (ev=${evaluation.suggested_ev.toFixed(2)}, relevance=${evaluation.relevance_score.toFixed(2)})`);
+      console.log(`  ✅ Promoted: "${metadata!.clean_title}" (ev=${metadata!.suggested_ev.toFixed(2)}, conf=${verdictConf.toFixed(2)})`);
       return 'promoted';
     }
     return 'error';
   }
 
-  // Borderline - needs admin review
   await getDb()
     .from('event_candidates')
     .update({ status: 'evaluated' })
     .eq('id', candidateId);
-  console.log(`  🟡 Needs review: "${candidate.title}" (relevance=${evaluation.relevance_score.toFixed(2)})`);
+  console.log(`  🟡 Needs review: "${candidate.title}" (ev=${metadata!.suggested_ev.toFixed(2)})`);
   return 'evaluated';
 }
 
 async function promoteToResources(
   candidateId: string,
   candidate: any,
-  evaluation: AIEvaluation
+  metadata: EventMetadata,
 ): Promise<string | null> {
   const resourceId = `eval-${candidate.source}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
-  // Route fellowship/course/program types to the programs category
-  const PROGRAM_EVENT_TYPES = ['fellowship', 'course', 'program'];
-  const category = PROGRAM_EVENT_TYPES.includes(evaluation.event_type) ? 'programs' : 'events';
+  const PROGRAM_TYPES = ['fellowship', 'course', 'program'];
+  const category = PROGRAM_TYPES.includes(metadata.event_type) ? 'programs' : 'events';
 
   const { error } = await getDb().from('resources').insert({
     id: resourceId,
-    title: evaluation.clean_title,
-    description: evaluation.clean_description,
+    title: metadata.clean_title,
+    description: metadata.clean_description,
     url: candidate.url,
-    source_org: evaluation.organization || candidate.source_org || candidate.source,
+    source_org: metadata.organization || candidate.source_org || candidate.source,
     category,
-    location: evaluation.location || candidate.location || 'Global',
+    location: metadata.location || candidate.location || 'Global',
     min_minutes: estimateEventMinutes(
-      evaluation.event_type,
-      evaluation.event_date || candidate.event_date,
-      evaluation.event_end_date,
+      metadata.event_type,
+      metadata.event_date || candidate.event_date,
+      metadata.event_end_date,
     ),
-    ev_general: evaluation.suggested_ev,
-    friction: evaluation.suggested_friction,
+    ev_general: metadata.suggested_ev,
+    friction: metadata.suggested_friction,
     enabled: true,
     status: 'approved',
-    event_date: evaluation.event_date || candidate.event_date || null,
-    event_end_date: evaluation.event_end_date || null,
-    event_time: evaluation.event_time || null,
-    event_type: evaluation.event_type,
-    is_online: evaluation.is_online,
+    event_date: metadata.event_date || candidate.event_date || null,
+    event_end_date: metadata.event_end_date || null,
+    event_time: metadata.event_time || null,
+    event_type: metadata.event_type,
+    is_online: metadata.is_online,
     activity_score: 0.9,
     url_status: 'reachable',
+    verification_notes: 'v2-accept',
+    verified_at: new Date().toISOString(),
     source: candidate.source,
     source_id: candidate.source_id,
     created_at: new Date().toISOString(),
   });
 
   if (error) {
-    console.error(`  Failed to promote "${evaluation.clean_title}":`, error.message);
+    console.error(`  Failed to promote "${metadata.clean_title}":`, error.message);
     return null;
   }
 
-  // Mark candidate as promoted
   await getDb()
     .from('event_candidates')
     .update({
@@ -418,7 +331,7 @@ async function promoteToResources(
 
 // ─── CLI Modes ─────────────────────────────────────────────
 
-async function processQueue(force = false, modelOverride?: string) {
+async function processQueue(force = false) {
   const statusFilter = force ? ['pending', 'evaluated', 'rejected'] : ['pending'];
 
   const { data: candidates, error } = await getDb()
@@ -437,13 +350,12 @@ async function processQueue(force = false, modelOverride?: string) {
     return;
   }
 
-  // Fetch full candidate data for pre-filtering
+  // Pre-filter to drop obvious junk before any LLM call.
   const { data: fullCandidates } = await getDb()
     .from('event_candidates')
     .select('id, title, description, source_org, url')
     .in('id', candidates.map(c => c.id));
 
-  // Run pre-filter to reject obvious junk without using API credits
   const candidateEvents = (fullCandidates || []).map(c => ({
     title: c.title || '',
     description: c.description || '',
@@ -456,7 +368,6 @@ async function processQueue(force = false, modelOverride?: string) {
   const { kept, rejected: prefiltered } = preFilter(candidateEvents);
   const keptIds = new Set(kept.map(e => e.source_id));
 
-  // Auto-reject pre-filtered candidates in the database
   let prefilteredCount = 0;
   for (const r of prefiltered) {
     await getDb()
@@ -465,7 +376,6 @@ async function processQueue(force = false, modelOverride?: string) {
       .eq('id', r.event.source_id);
     prefilteredCount++;
   }
-
   if (prefilteredCount > 0) {
     console.log(`🚫 Pre-filter auto-rejected ${prefilteredCount} obviously irrelevant candidates.`);
   }
@@ -473,17 +383,15 @@ async function processQueue(force = false, modelOverride?: string) {
   const toEvaluate = candidates.filter(c => keptIds.has(c.id));
   console.log(`📋 Processing ${toEvaluate.length} candidates (${prefilteredCount} pre-filtered)...\n`);
 
-  // Fetch existing events once for dedup across the whole batch
   const existingEvents = await fetchExistingEvents();
   console.log(`📦 Loaded ${existingEvents.length} existing events for duplicate detection.\n`);
 
   const counts = { promoted: 0, rejected: 0, evaluated: 0, skipped: 0, error: 0 };
 
   for (const c of toEvaluate) {
-    const result = await evaluateCandidate(c.id, force, existingEvents, modelOverride);
+    const result = await evaluateCandidate(c.id, force, existingEvents);
     counts[result]++;
 
-    // After promotion, add to existingEvents so later candidates can dedup against it
     if (result === 'promoted') {
       const { data: promoted } = await getDb()
         .from('event_candidates')
@@ -501,10 +409,9 @@ async function processQueue(force = false, modelOverride?: string) {
         });
       }
     }
-
-    // Rate limit: ~0.5s between API calls to be respectful
-    await new Promise(r => setTimeout(r, 500));
   }
+
+  await closeBrowser().catch(() => undefined);
 
   console.log(`\n📊 Queue processing complete:`);
   console.log(`   🚫 Pre-filtered: ${prefilteredCount}`);
@@ -515,10 +422,9 @@ async function processQueue(force = false, modelOverride?: string) {
   console.log(`   💥 Errors:       ${counts.error}`);
 }
 
-async function evaluateSingleUrl(url: string, modelOverride?: string) {
+async function evaluateSingleUrl(url: string) {
   console.log(`🔍 Evaluating URL: ${url}\n`);
 
-  // Try to find an existing candidate with this URL first
   const hostname = new URL(url).hostname.replace(/^www\./, '');
   const pathname = new URL(url).pathname.replace(/\/+$/, '');
 
@@ -531,12 +437,12 @@ async function evaluateSingleUrl(url: string, modelOverride?: string) {
   if (existing?.[0]) {
     console.log(`Found existing candidate: "${existing[0].title}" (status: ${existing[0].status})`);
     console.log('Re-evaluating...\n');
-    const outcome = await evaluateCandidate(existing[0].id, true, undefined, modelOverride);
+    const outcome = await evaluateCandidate(existing[0].id, true);
+    await closeBrowser().catch(() => undefined);
     console.log(`\nResult: ${outcome}`);
     return;
   }
 
-  // Not found - insert as a new candidate and evaluate
   console.log('No existing candidate found. Creating new entry...\n');
 
   const candidateId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -554,7 +460,8 @@ async function evaluateSingleUrl(url: string, modelOverride?: string) {
     return;
   }
 
-  const outcome = await evaluateCandidate(candidateId, true, undefined, modelOverride);
+  const outcome = await evaluateCandidate(candidateId, true);
+  await closeBrowser().catch(() => undefined);
   console.log(`\nResult: ${outcome}`);
 }
 
@@ -584,17 +491,18 @@ async function evaluateSingleDescription(title: string, description?: string, da
 
   if (recent?.[0]) {
     const outcome = await evaluateCandidate(recent[0].id, true);
+    await closeBrowser().catch(() => undefined);
     console.log(`\nResult: ${outcome}`);
   }
 }
 
 // ─── Exported run function ───────────────────────────────────
 
-export async function run(opts: { processQueue?: boolean; force?: boolean; url?: string; title?: string; description?: string; date?: string; model?: string } = {}) {
+export async function run(opts: { processQueue?: boolean; force?: boolean; url?: string; title?: string; description?: string; date?: string } = {}) {
   if (opts.processQueue) {
-    await processQueue(opts.force || false, opts.model);
+    await processQueue(opts.force || false);
   } else if (opts.url) {
-    await evaluateSingleUrl(opts.url, opts.model);
+    await evaluateSingleUrl(opts.url);
   } else if (opts.title) {
     await evaluateSingleDescription(opts.title, opts.description, opts.date);
   } else {
@@ -602,7 +510,6 @@ export async function run(opts: { processQueue?: boolean; force?: boolean; url?:
   }
 }
 
-// CLI entrypoint
 if (process.argv[1]?.endsWith('/scripts/evaluate-event.ts')) {
   const args = process.argv.slice(2);
   const opts: Parameters<typeof run>[0] = {};
@@ -620,8 +527,9 @@ if (process.argv[1]?.endsWith('/scripts/evaluate-event.ts')) {
     if (dateIdx >= 0) opts.date = args[dateIdx + 1];
   }
 
-  run(opts).catch(err => {
+  run(opts).catch(async err => {
     console.error('💥 Fatal:', err);
+    await closeBrowser().catch(() => undefined);
     process.exit(1);
   });
 }

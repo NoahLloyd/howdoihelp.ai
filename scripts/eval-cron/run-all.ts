@@ -47,14 +47,17 @@ interface Phase {
 }
 
 const PHASES: Phase[] = [
-  // Gather + v1 evaluator. Uses ANTHROPIC_API_KEY (cheap haiku calls) — these
-  // scripts predate the subscription path. Cost is small (~$1-3 per run).
-  { name: 'events:   sync-all-events',      cmd: ['npx', 'tsx', 'scripts/sync-all-events.ts'],      useCli: false },
-  { name: 'comms:    sync-all-communities', cmd: ['npx', 'tsx', 'scripts/sync-all-communities.ts'], useCli: false },
+  // Gather + v2 evaluator chain. Each gather script feeds new candidates into
+  // *_candidates and then runs evaluate-{event,community}.ts on them. The
+  // evaluators now use the v2 pipeline (Haiku stage 1 + Sonnet vision stage 2)
+  // plus a Sonnet metadata extractor — all on CLAUDE_PROVIDER=cli so the cost
+  // is the user's Claude Code subscription, not the paid API.
+  { name: 'events:   sync-all-events',      cmd: ['npx', 'tsx', 'scripts/sync-all-events.ts'],      useCli: true  },
+  { name: 'comms:    sync-all-communities', cmd: ['npx', 'tsx', 'scripts/sync-all-communities.ts'], useCli: true  },
   { name: 'programs: sync-programs',         cmd: ['npx', 'tsx', 'scripts/sync-programs.ts'],        useCli: false },
   { name: 'cleanup:  standardize-countries', cmd: ['npx', 'tsx', 'scripts/standardize-countries.ts'], useCli: false },
-  // v2 reverify on already-promoted resources. Uses CLAUDE_PROVIDER=cli so it
-  // runs on the user's Claude Code subscription instead of the paid API.
+  // v2 reverify on already-promoted resources. Walks every enabled community
+  // and upcoming event through the same v2 pipeline that gates new candidates.
   { name: 'v2:       reverify',              cmd: ['npx', 'tsx', 'scripts/eval-cron/reverify.ts'],   useCli: true  },
   // Post-reverify: classify EA/LW activity, mine other-reject reasoning,
   // probe auth-walled liveness, and apply the dispositions to the DB. The
