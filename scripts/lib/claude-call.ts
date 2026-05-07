@@ -91,8 +91,14 @@ async function callViaCli<T>(args: ClaudeCallArgs): Promise<ClaudeCallResult<T>>
     cliArgs.push('--tools', '');
   }
 
+  // Strip ANTHROPIC_API_KEY from the child env. If it's set, the Claude CLI
+  // prefers it over the OAuth subscription credentials in ~/.claude and bills
+  // every call to the paid API instead of the user's subscription quota.
+  const childEnv = { ...process.env };
+  delete childEnv.ANTHROPIC_API_KEY;
+
   const stdout = await new Promise<string>((resolve, reject) => {
-    const proc = spawn('claude', cliArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const proc = spawn('claude', cliArgs, { stdio: ['pipe', 'pipe', 'pipe'], env: childEnv });
     let out = '';
     let err = '';
     proc.stdout.on('data', d => (out += d.toString()));
