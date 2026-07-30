@@ -5,10 +5,12 @@
  *   1. EA Forum           (GraphQL – ~449 local groups)
  *   2. LessWrong          (GraphQL – ~240 local groups)
  *   3. PauseAI            (GitHub JSON – ~96 chapters + ~28 adjacent)
- *   4. AISafety.com       (HTML scrape – ~200 communities)
  *
  * Then deduplicates by normalized URL (or name+location),
  * and inserts into the `community_candidates` staging table for AI evaluation.
+ *
+ * AISafety.com communities are mirrored directly into resources by
+ * scripts/sync-aisafety.ts using the official public API.
  *
  * Usage:
  *   npx tsx scripts/sync-communities.ts              # live sync
@@ -18,17 +20,7 @@
 import * as dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
-import { createClient } from "@supabase/supabase-js";
 import { insertCommunityCandidates, type GatheredCommunity } from "./lib/insert-community-candidates";
-
-// ─── Config ────────────────────────────────────────────────
-
-function getDb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Missing SUPABASE env vars");
-  return createClient(url, key);
-}
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -42,34 +34,32 @@ interface CommunityEntry {
   source_id: string;
 }
 
-// ─── Source org derivation ─────────────────────────────────
+interface ForumGroup {
+  _id: string;
+  name: string;
+  location?: string;
+  contents?: { plaintextDescription?: string };
+  website?: string;
+  facebookLink?: string;
+  isOnline?: boolean;
+}
 
-/** Derive a meaningful source_org from the community title and URL */
-function deriveSourceOrg(title: string, url: string): string {
-  try {
-    const host = new URL(url).hostname.replace(/^www\./, "");
-    if (host.includes("discord")) return "Discord";
-    if (host.includes("reddit.com")) return "Reddit";
-    if (host.includes("t.me") || host.includes("telegram")) return "Telegram";
-    if (host.includes("meetup.com")) return "Meetup";
-    if (host.includes("facebook.com")) return "Facebook";
-    if (host.includes("linkedin.com")) return "LinkedIn";
-    if (host.includes("slack.com")) return "Slack";
-    if (host.includes("instagram.com")) return "Instagram";
-    if (host.includes("groups.google.com")) return "Google Groups";
-    if (host.includes("lesswrong.com")) return "LessWrong";
-    if (host.includes("effectivealtruism.org")) return "EA Forum";
-    if (host.includes("alignmentforum.org")) return "Alignment Forum";
-    if (host.includes("substack.com")) return "Substack";
-  } catch { /* fall through */ }
+interface ForumGroupsResponse {
+  data?: {
+    localgroups?: {
+      results?: ForumGroup[];
+    };
+  };
+}
 
-  // Use cleaned community title for orgs with their own websites
-  const clean = title
-    .replace(/\s*\([^)]+\)\s*$/, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&#x27;/g, "'")
-    .trim();
-  return clean || "Other";
+interface PauseAICommunity {
+  name?: string;
+  parent_name?: string;
+  link?: string;
+}
+
+interface PauseAIResponse {
+  communities?: PauseAICommunity[];
 }
 
 // ─── URL normalization ─────────────────────────────────────
@@ -111,11 +101,11 @@ async function fetchEAForumGroups(): Promise<CommunityEntry[]> {
     body: JSON.stringify({ query }),
   });
 
-  const json = await res.json();
+  const json = (await res.json()) as ForumGroupsResponse;
   const groups = json?.data?.localgroups?.results || [];
   console.log(`   → ${groups.length} groups`);
 
-  return groups.map((g: any) => ({
+  return groups.map((g) => ({
     title: g.name,
     description: (g.contents?.plaintextDescription || "").slice(0, 500),
     url: g.website || g.facebookLink || `https://forum.effectivealtruism.org/groups/${g._id}`,
@@ -153,11 +143,11 @@ async function fetchLessWrongGroups(): Promise<CommunityEntry[]> {
     body: JSON.stringify({ query }),
   });
 
-  const json = await res.json();
+  const json = (await res.json()) as ForumGroupsResponse;
   const groups = json?.data?.localgroups?.results || [];
   console.log(`   → ${groups.length} groups`);
 
-  return groups.map((g: any) => ({
+  return groups.map((g) => ({
     title: g.name,
     description: (g.contents?.plaintextDescription || "").slice(0, 500),
     url: g.website || g.facebookLink || `https://www.lesswrong.com/groups/${g._id}`,
@@ -181,11 +171,11 @@ async function fetchPauseAIGroups(): Promise<CommunityEntry[]> {
     fetch(`${PAUSEAI_BASE}/adjacent-communities.json`),
   ]);
 
-  const mainData = await mainRes.json();
-  const adjData = await adjRes.json();
+  const mainData = (await mainRes.json()) as PauseAIResponse;
+  const adjData = (await adjRes.json()) as PauseAIResponse;
 
-  const pauseaiComms: any[] = mainData.communities || [];
-  const adjacentComms: any[] = adjData.communities || [];
+  const pauseaiComms = mainData.communities || [];
+  const adjacentComms = adjData.communities || [];
 
   console.log(`   → ${pauseaiComms.length} PauseAI chapters + ${adjacentComms.length} adjacent`);
 
@@ -214,7 +204,7 @@ async function fetchPauseAIGroups(): Promise<CommunityEntry[]> {
   }
 
   for (const c of adjacentComms) {
-    if (!c.link || c.link.startsWith("$$")) continue;
+    if (!c.name || !c.link || c.link.startsWith("$$")) continue;
     entries.push({
       title: c.name,
       description: `AI safety community listed on PauseAI.`,
@@ -229,72 +219,16 @@ async function fetchPauseAIGroups(): Promise<CommunityEntry[]> {
   return entries;
 }
 
-// ─── 4. AISafety.com ───────────────────────────────────────
-
-async function fetchAISafetyGroups(): Promise<CommunityEntry[]> {
-  console.log("📡 Scraping AISafety.com communities...");
-
-  const res = await fetch("https://www.aisafety.com/communities");
-  const html = await res.text();
-
-  // The page structure has community cards with names as h3 headings
-  // and links as the wrapping <a> tags. We'll parse with regex
-  // since we don't want to add a DOM parser dependency.
-  //
-  // Pattern: each community card is wrapped in an <a> tag with href,
-  // containing an <h3> with the community name, followed by description text,
-  // Platform info, Activity level, and Focus.
-
-  const entries: CommunityEntry[] = [];
-
-  // Match: <a href="URL">...<h3>NAME</h3>...DESCRIPTION...Platform\nPLATFORM...Activity level\nACTIVITY...Focus\nFOCUS...</a>
-  // Simplified: find all <h3 class="...">NAME</h3> blocks
-
-  // Find all groups by looking for the card pattern
-  // Each community block starts with heading content and has a link
-  const cardRegex = /<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>/gi;
-
-  let match;
-  const seen = new Set<string>();
-
-  while ((match = cardRegex.exec(html)) !== null) {
-    const url = match[1];
-    const rawName = match[2].replace(/<[^>]*>/g, "").trim();
-
-    if (!rawName || !url || url === "#") continue;
-    if (seen.has(rawName)) continue; // aisafety lists each community twice in their layout
-    seen.add(rawName);
-
-    // Skip non-community links (navigation etc.)
-    if (url.startsWith("/") || url.includes("aisafety.com")) continue;
-
-    const fullUrl = url.startsWith("http") ? url : `https://${url}`;
-    entries.push({
-      title: rawName,
-      description: `AI safety community listed on AISafety.com.`,
-      url: fullUrl,
-      source_org: deriveSourceOrg(rawName, fullUrl),
-      location: "Global", // hard to parse location from the HTML
-      source: "aisafety",
-      source_id: `aisafety-${rawName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-    });
-  }
-
-  console.log(`   → ${entries.length} communities parsed`);
-  return entries;
-}
-
 // ─── Deduplication ─────────────────────────────────────────
 
 function deduplicateCommunities(all: CommunityEntry[]): CommunityEntry[] {
   const byUrl = new Map<string, CommunityEntry>();
   const bySourceId = new Map<string, CommunityEntry>();
 
-  // Priority: ea-forum > pauseai > aisafety > lesswrong
+  // Priority: ea-forum > pauseai > lesswrong
   const priority: Record<string, number> = {
-    "ea-forum": 4,
-    "pauseai": 3,
-    "aisafety": 2,
+    "ea-forum": 3,
+    "pauseai": 2,
     "lesswrong": 1,
   };
 
@@ -359,7 +293,7 @@ export async function run(opts: { dryRun?: boolean } = {}) {
   console.log(`🔄 Community Sync - ${dryRun ? "DRY RUN" : "LIVE"}`);
   console.log(`   ${new Date().toISOString()}\n`);
 
-  const [eaGroups, lwGroups, pauseaiGroups, aisafetyGroups] = await Promise.all([
+  const [eaGroups, lwGroups, pauseaiGroups] = await Promise.all([
     fetchEAForumGroups().catch((err) => {
       console.error("❌ EA Forum fetch failed:", err.message);
       return [] as CommunityEntry[];
@@ -372,20 +306,15 @@ export async function run(opts: { dryRun?: boolean } = {}) {
       console.error("❌ PauseAI fetch failed:", err.message);
       return [] as CommunityEntry[];
     }),
-    fetchAISafetyGroups().catch((err) => {
-      console.error("❌ AISafety.com fetch failed:", err.message);
-      return [] as CommunityEntry[];
-    }),
   ]);
 
   console.log(`\n📊 Totals before dedup:`);
   console.log(`   EA Forum:    ${eaGroups.length}`);
   console.log(`   LessWrong:   ${lwGroups.length}`);
   console.log(`   PauseAI:     ${pauseaiGroups.length}`);
-  console.log(`   AISafety:    ${aisafetyGroups.length}`);
-  console.log(`   Raw total:   ${eaGroups.length + lwGroups.length + pauseaiGroups.length + aisafetyGroups.length}`);
+  console.log(`   Raw total:   ${eaGroups.length + lwGroups.length + pauseaiGroups.length}`);
 
-  const all = [...eaGroups, ...lwGroups, ...pauseaiGroups, ...aisafetyGroups];
+  const all = [...eaGroups, ...lwGroups, ...pauseaiGroups];
   const deduped = deduplicateCommunities(all);
 
   console.log(`   After dedup: ${deduped.length}`);

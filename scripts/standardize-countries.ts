@@ -52,7 +52,8 @@ async function standardizeCountries() {
     const { data, error } = await supabase
         .from('resources')
         .select('id, title, location')
-        .not('location', 'is', null);
+        .not('location', 'is', null)
+        .or('source.is.null,source.neq.aisafety');
 
     if (error) {
         console.error("Error fetching data:", error);
@@ -66,7 +67,7 @@ async function standardizeCountries() {
         
         let newLocation = item.location;
         const parts = item.location.split(',');
-        let lastPart = parts[parts.length - 1].trim();
+        const lastPart = parts[parts.length - 1].trim();
 
         if (countryMap[lastPart]) {
             if (parts.length > 1) {

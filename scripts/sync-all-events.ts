@@ -13,7 +13,6 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
-import { run as runAisafety } from './gatherers/gather-aisafety';
 import { run as runEaLesswrong } from './gatherers/gather-ea-lesswrong';
 import { run as runEventbrite } from './gatherers/gather-eventbrite';
 import { run as runLuma } from './gatherers/gather-luma';
@@ -21,7 +20,6 @@ import { run as runMeetup } from './gatherers/gather-meetup';
 import { run as runEvaluate } from './evaluate-event';
 
 const GATHERERS = [
-  { name: 'AISafety.com Airtable', run: runAisafety },
   { name: 'EA Forum + LessWrong', run: runEaLesswrong },
   { name: 'Eventbrite', run: runEventbrite },
   { name: 'Luma', run: runLuma },

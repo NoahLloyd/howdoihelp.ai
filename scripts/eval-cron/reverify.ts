@@ -1,7 +1,8 @@
 /**
  * reverify.ts - Scheduled re-verification job for the v2 evaluator.
  *
- * Runs through every currently-promoted resource (events + communities) and
+ * Runs through every currently-promoted non-AISafety resource (events +
+ * communities) and
  * asks the v2 pipeline whether the URL still passes. Writes a Markdown
  * report to .context/eval-reports/<timestamp>.md listing rows that the
  * v2 pipeline now rejects.
@@ -100,16 +101,17 @@ async function main() {
   );
 
   console.log('📥 Fetching enabled resources from Supabase...');
-  // Communities: every enabled row.
-  // Events: only upcoming (event_date >= today). Past events shouldn't be in
-  // the directory anyway and would burn pipeline cost for no reason.
+  // Communities: every enabled non-AISafety row.
+  // Events: only upcoming non-AISafety rows. AISafety rows are verified by the
+  // official API mirror and skipped here to avoid duplicate AI verification.
   const today = new Date().toISOString().slice(0, 10);
 
   const { data: communities, error: cErr } = await supa
     .from('resources')
     .select('id, title, url, category, source_org, enabled, status')
     .eq('enabled', true)
-    .eq('category', 'communities');
+    .eq('category', 'communities')
+    .or('source.is.null,source.neq.aisafety');
   if (cErr) throw new Error(`Communities query failed: ${cErr.message}`);
 
   const { data: events, error: eErr } = await supa
@@ -117,6 +119,7 @@ async function main() {
     .select('id, title, url, category, source_org, enabled, status, event_date')
     .eq('enabled', true)
     .eq('category', 'events')
+    .or('source.is.null,source.neq.aisafety')
     .gte('event_date', today);
   if (eErr) throw new Error(`Events query failed: ${eErr.message}`);
 
@@ -147,8 +150,9 @@ async function main() {
       console.log(
         `[${i + 1}/${rows.length}] ${flag} ${result.finalVerdict.padEnd(6)} ${row.url}  (${result.decidedAt}, ${result.durationSec.toFixed(1)}s)`,
       );
-    } catch (err: any) {
-      console.error(`[${i + 1}/${rows.length}] 💥 pipeline failed for ${row.url}: ${err.message}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[${i + 1}/${rows.length}] 💥 pipeline failed for ${row.url}: ${message}`);
     }
   }
 

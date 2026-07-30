@@ -1,14 +1,7 @@
 import { getSupabase, fetchAllRows } from "./supabase";
 import { resources as localResources } from "@/data/resources";
 import type { Resource, Variant, UserAnswers } from "@/types";
-
-/** Check if a resource's date (event_date or deadline_date) has passed */
-function isPastDate(resource: Resource): boolean {
-  const today = new Date().toISOString().slice(0, 10);
-  if (resource.event_date && resource.event_date < today) return true;
-  if (resource.deadline_date && resource.deadline_date < today) return true;
-  return false;
-}
+import { isVisibleResource } from "./resource-currentness";
 
 /**
  * Fetch all enabled, approved resources from Supabase.
@@ -19,7 +12,7 @@ export async function fetchResources(): Promise<Resource[]> {
   const supabase = getSupabase();
 
   const filterActive = (resources: Resource[]) =>
-    resources.filter((r) => r.enabled && r.status === "approved" && !isPastDate(r));
+    resources.filter((r) => isVisibleResource(r));
 
   if (!supabase) {
     return filterActive(localResources);

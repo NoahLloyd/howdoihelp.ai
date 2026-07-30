@@ -6,6 +6,7 @@ import type { Resource, ResourceCategory } from "@/types";
 import type { PromptKey, PromptVersion } from "@/lib/prompts";
 import { clearPromptCache } from "@/lib/prompts";
 import { fetchAllRows } from "@/lib/supabase";
+import { isResourceCurrent } from "@/lib/resource-currentness";
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -77,7 +78,7 @@ export async function fetchPublicResources(
   category: ResourceCategory
 ): Promise<Resource[]> {
   const supabase = getServiceClient();
-  return fetchAllRows<Resource>((from, to) =>
+  const resources = await fetchAllRows<Resource>((from, to) =>
     supabase
       .from("resources")
       .select("*")
@@ -87,6 +88,7 @@ export async function fetchPublicResources(
       .order("ev_general", { ascending: false })
       .range(from, to)
   );
+  return resources.filter((resource) => isResourceCurrent(resource));
 }
 
 // ─── Toggle ─────────────────────────────────────────────────
@@ -666,13 +668,8 @@ export async function fetchTesterData(): Promise<TesterData> {
       .neq("calendar_link", ""),
   ]);
 
-  // Filter out past-date events/programs (matches production behavior in lib/data.ts)
-  const today = new Date().toISOString().slice(0, 10);
-  const resources = allResources.filter((r) => {
-    if (r.event_date && r.event_date < today) return false;
-    if (r.deadline_date && r.deadline_date < today) return false;
-    return true;
-  });
+  // Filter out expired rows using the same currentness semantics as production.
+  const resources = allResources.filter((resource) => isResourceCurrent(resource));
   const rawGuides = guidesRes.data || [];
 
   // Enrich guides with profile data

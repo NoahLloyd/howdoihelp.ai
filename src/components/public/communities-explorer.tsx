@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import Link from "next/link";
 import type { Resource } from "@/types";
 import { getGeoData } from "@/lib/geo";
 import { SubmitForm } from "./submit-form";
@@ -576,18 +575,6 @@ export function CommunitiesExplorer({ resources }: CommunitiesExplorerProps) {
           </p>
         )}
 
-        {/* ── API link ── */}
-        <div className="mt-12 pt-6 border-t border-border/50 text-center">
-          <p className="text-xs text-muted-foreground">
-            This data is available via our{" "}
-            <Link
-              href="/developers"
-              className="text-accent hover:underline"
-            >
-              free public API
-            </Link>
-          </p>
-        </div>
       </div>
 
       {/* ── Submit overlay ── */}

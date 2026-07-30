@@ -1,13 +1,11 @@
 import { spawn } from 'child_process';
-import * as path from 'path';
 
 const scripts = [
-    // 1. Event pipeline: gather from all sources → AI evaluate → promote/reject
-    'scripts/sync-all-events.ts',
+    // 1. Canonical AISafety.com mirror: communities, events, training
+    'scripts/sync-aisafety.ts',
 
-    // 2. Data scrubbing & pruning (cleans up any new dirty data safely)
+    // 2. Lightweight cleanup for normalized display fields
     'scripts/standardize-countries.ts',
-    'scripts/penalize-dead-events.ts'
 ];
 
 async function runScript(scriptPath: string): Promise<void> {
@@ -41,7 +39,7 @@ async function runAll() {
     for (const script of scripts) {
         try {
             await runScript(script);
-        } catch (err) {
+        } catch {
             console.error("\n❌ Pipeline aborted due to error in script.");
             process.exit(1);
         }

@@ -11,7 +11,7 @@ const EVAL_MODELS = [
 ] as const;
 
 const GATHERERS = [
-  { id: "gather-aisafety", name: "AISafety.com", desc: "Airtable shared view" },
+  { id: "sync-aisafety-events", name: "AISafety API sync", desc: "Official API → resources cache" },
   { id: "gather-ea-lesswrong", name: "EA Forum + LessWrong", desc: "GraphQL API" },
   { id: "gather-eventbrite", name: "Eventbrite", desc: "Search + scrape" },
   { id: "gather-luma", name: "Luma", desc: "Calendar API + discover" },
@@ -28,8 +28,8 @@ export default function EventsPipelinePage() {
         <>
           <p className="text-xs text-muted font-mono mb-3">
             {ctx.mode === "dry-run"
-              ? "Dry run mode: events are fetched and displayed but NOT inserted into the database"
-              : "Live mode: events will be inserted into the candidates table"}
+              ? "Dry run mode: data is fetched and planned but NOT written to the database"
+              : "Live mode: AISafety updates resources; external gatherers insert candidates"}
           </p>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             {GATHERERS.map((g) => {
@@ -88,10 +88,10 @@ export default function EventsPipelinePage() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="text-sm font-medium text-foreground">
-                    AI Evaluator
+                    Manual AI Evaluator
                   </h3>
                   <p className="text-[11px] text-muted font-mono mt-0.5">
-                    Claude scrapes, scores, and auto-promotes or rejects candidates
+                    Claude scores external/submitted candidates
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -171,10 +171,10 @@ export default function EventsPipelinePage() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="text-sm font-medium text-foreground">
-                    Run All
+                    External Gather + Evaluate
                   </h3>
                   <p className="text-[11px] text-muted font-mono mt-0.5">
-                    Full pipeline orchestrator
+                    Manual legacy candidate pipeline
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -194,7 +194,7 @@ export default function EventsPipelinePage() {
                 className="w-full px-3 py-2 text-xs font-medium bg-foreground text-background rounded-md
                   hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
               >
-                {ctx.activeScript === "sync-all" ? "Running..." : "Run All Gatherers"}
+                {ctx.activeScript === "sync-all" ? "Running..." : "Run Legacy Pipeline"}
               </button>
             </div>
           </div>

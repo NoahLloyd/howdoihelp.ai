@@ -305,6 +305,7 @@ async function processQueue(force = false) {
     .from('community_candidates')
     .select('id')
     .in('status', statusFilter)
+    .neq('source', 'aisafety')
     .order('created_at', { ascending: true });
 
   if (error) {

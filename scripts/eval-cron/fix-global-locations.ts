@@ -3,11 +3,10 @@
  * "City, Country" / "Country" / "Online" / "Unknown" location for every
  * resource currently tagged location="Global".
  *
- * The aisafety.com scraper drops everything as "Global" by default, so the
- * directory had ~115 entries (e.g. "AI Safety Aachen", "Sydney AI Safety
- * Space", "AI Safety Brazil") that are clearly geo-specific but landed in
- * the catch-all bucket. Country/city filtering and geo-sort can't surface
- * them properly until the location is fixed.
+ * Older generated rows sometimes landed in the catch-all "Global" bucket even
+ * when the title clearly had a city/country. AISafety API rows are excluded
+ * from this repair job because their upstream location is managed by the
+ * official mirror.
  *
  * For each Global row we ask Claude (subscription) to look at title +
  * description + URL and return a clean location, then write it back.
@@ -100,6 +99,7 @@ async function fetchGlobalRows(supa: Supa): Promise<Row[]> {
       .eq('category', 'communities')
       .eq('enabled', true)
       .eq('location', 'Global')
+      .or('source.is.null,source.neq.aisafety')
       .range(from, from + 999);
     if (error) throw new Error(`fetch failed: ${error.message}`);
     if (!data || data.length === 0) break;
@@ -131,8 +131,9 @@ Return your JSON now.`;
       toolDescription: 'Submit the cleaned location for the community.',
     });
     return result.structured;
-  } catch (err: any) {
-    console.error(`  ✗ ${row.title}: ${err?.message || err}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`  ✗ ${row.title}: ${message}`);
     return null;
   }
 }
@@ -157,12 +158,10 @@ async function main() {
   let unknown = 0;
   let lowConfidence = 0;
   let failed = 0;
-  let processed = 0;
   const CONCURRENCY = 6;
 
   async function processOne(r: Row, idx: number): Promise<void> {
     const result = await classify(r);
-    processed++;
     if (!result) {
       failed++;
       return;

@@ -1,7 +1,10 @@
 /**
  * sync-programs.ts - The full programs pipeline orchestrator.
  *
- * Runs the BlueDot and AISafety gatherers to scrape courses and upcoming rounds.
+ * Compatibility entrypoint for program data. The scheduled/default path now
+ * mirrors AISafety.com's official training API directly into resources.
+ * BlueDot remains available via scripts/gatherers/gather-bluedot.ts for manual
+ * candidate discovery, but is not part of this orchestrator.
  *
  * Usage:
  *   npx tsx scripts/sync-programs.ts
@@ -11,8 +14,7 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
-import { run as runBluedot } from './gatherers/gather-bluedot';
-import { run as runAisafety } from './gatherers/gather-aisafety';
+import { run as runAisafetySync } from './sync-aisafety';
 
 export async function run(opts: { dryRun?: boolean } = {}) {
   const { dryRun = false } = opts;
@@ -22,22 +24,9 @@ export async function run(opts: { dryRun?: boolean } = {}) {
   console.log(`  ${new Date().toISOString()}`);
   console.log('='.repeat(60));
 
-  // Phase 1: Gather from all sources
-  console.log('\n\n--- PHASE 1: GATHERING ---\n');
+  console.log('\n\n--- PHASE 1: AISAFETY TRAINING API MIRROR ---\n');
 
-  console.log('Running BlueDot Impact gatherer...\n');
-  try {
-    await runBluedot({ dryRun });
-  } catch (err: any) {
-    console.error(`\n  WARNING: BlueDot gatherer had errors: ${err.message}\n`);
-  }
-
-  console.log('\nRunning AISafety.com gatherer (programs)...\n');
-  try {
-    await runAisafety({ dryRun, programs: true });
-  } catch (err: any) {
-    console.error(`\n  WARNING: AISafety.com programs gatherer had errors: ${err.message}\n`);
-  }
+  await runAisafetySync({ dryRun, collections: ['training'] });
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log('\n' + '='.repeat(60));

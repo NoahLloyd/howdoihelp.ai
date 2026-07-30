@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Link from "next/link";
 import type { Resource } from "@/types";
 import { SubmitForm } from "@/components/public/submit-form";
 import { CATEGORIES } from "@/lib/categories";
@@ -56,8 +55,6 @@ export function ProgramsClientPage({ resources }: ProgramsClientPageProps) {
         const deadline = new Date(r.deadline_date);
         if (deadline >= today) {
           dl.push(r);
-        } else {
-          on.push(r); // past deadline, treat as ongoing
         }
       } else {
         on.push(r);
@@ -190,16 +187,6 @@ export function ProgramsClientPage({ resources }: ProgramsClientPageProps) {
             </table>
           </div>
         </div>
-      </div>
-
-      {/* API link */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 -mt-20 pb-16 text-center">
-        <p className="text-xs text-muted-foreground">
-          This data is available via our{" "}
-          <Link href="/developers" className="text-accent hover:underline">
-            free public API
-          </Link>
-        </p>
       </div>
 
       {showSubmit && (

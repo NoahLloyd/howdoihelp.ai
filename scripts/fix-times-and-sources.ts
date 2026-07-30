@@ -158,7 +158,7 @@ async function fixProgramTimes() {
 
   const { data: programs, error } = await supabase
     .from("resources")
-    .select("id, title, source_org, min_minutes, description")
+    .select("id, title, source, source_org, min_minutes, description")
     .eq("enabled", true)
     .eq("status", "approved")
     .eq("category", "programs");
@@ -170,7 +170,8 @@ async function fixProgramTimes() {
 
   let updated = 0;
   for (const prog of programs!) {
-    // Only fix the blanket 1200 min from AISafety.com scraper
+    // Only fix the blanket 1200 min from the retired AISafety.com scraper.
+    if (prog.source === "aisafety") continue;
     if (prog.source_org !== "AISafety.com") continue;
     if (prog.min_minutes !== 1200) continue;
 
