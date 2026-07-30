@@ -29,7 +29,7 @@ For the personalised flow, the top ~50 algorithmic picks (capped per category fo
 - **Next.js 16** (App Router) and **React 19**
 - **TypeScript**, **Tailwind v4**
 - **Supabase** (Postgres, Auth, RLS) for data and users
-- **Anthropic SDK** (Claude) for recommendations and for the resource-evaluator that runs on every scraped candidate; **OpenAI SDK** as a fallback
+- **Anthropic SDK** (Claude) for recommendations and for the manual/external resource-evaluator; **OpenAI SDK** as a fallback
 - **Bright Data** (with a custom Playwright-style scraper) for LinkedIn profile enrichment when a user pastes a profile URL
 - **Perplexity** for web search when a user types just a name instead of a profile link; **Exa** and **Tavily** are wired in as switchable alternatives for testing
 - **Resend** for guide-booking emails (request, approval, calendar link, follow-up) and magic-link sign-in
@@ -42,6 +42,14 @@ For the personalised flow, the top ~50 algorithmic picks (capped per category fo
 npm install
 cp .env.local.example .env.local   # then fill in the values below
 npm run dev
+```
+
+Useful checks:
+
+```bash
+npm test
+npm run typecheck
+npm run lint
 ```
 
 Required env vars (see `.env.local`):
@@ -123,37 +131,51 @@ src/
   types/index.ts            # Resource, Variant, UserAnswers, etc.
 
 scripts/
-  gatherers/                # One file per source: aisafety.com, BlueDot,
+  sync-aisafety.ts          # Official AISafety.com API mirror
+  gatherers/                # Manual external discovery: BlueDot,
                             # EA Forum + LessWrong, Eventbrite, Luma, Meetup
-  lib/                      # Pre-filter, candidate inserts, time estimation
+  lib/                      # AISafety API client, pre-filter, candidate inserts
   evaluate-event.ts         # LLM evaluator: candidate -> approve/reject
   evaluate-community.ts     # Same, for communities
   sync-events.ts            # Gather + evaluate + promote events
-  sync-communities.ts       # Gather + evaluate + promote communities
-  sync-programs.ts          # Programs from Airtable
+  sync-communities.ts       # Manual external community candidates
+  sync-programs.ts          # Compatibility wrapper for AISafety training
   sync-all.ts               # Local "run everything" wrapper
   ...
 
 supabase/migrations/        # SQL migrations, run in order
-.github/workflows/
-  sync-pipelines.yml        # Cron: re-runs scrapers every 2 days
 ```
 
 ## Pipelines
 
-The directory keeps itself fresh through a set of scripts that run on GitHub Actions every two days (`.github/workflows/sync-pipelines.yml`):
+AISafety.com is the canonical upstream for communities, events, and training. The scheduled path mirrors `https://aisafety.com/api/v1` into the local `resources` table:
 
-1. **Gather** new candidates from each source (`scripts/gatherers/`)
-2. **Pre-filter** with cheap heuristics (URL, language, obvious junk)
-3. **Evaluate** each candidate with Claude Haiku, which returns approve/reject + extracted fields (location, time commitment, tags, dates)
-4. **Promote** approvals into the `resources` table; reject duplicates and dead links
-5. **Clean up**: standardise country names, penalise inactive items
+Apply `supabase/migrations/012_add_aisafety_upstream_metadata.sql` before the first live sync. Dry runs do not require the migration and never write.
+
+1. **Fetch and validate** `communities`, `events`, and `training` from the official public API. No API key is needed.
+2. **Plan the whole sync before writing**. Bad HTTP status, malformed `{ data, meta }`, count mismatches, duplicate/empty ids, missing names/URLs, or suspiciously low collection counts abort with zero writes.
+3. **Mirror into `resources` as a cache** using `source="aisafety"` and canonical `source_id="${collection}:${record.id}"`. howdoihelp.ai public APIs remain the normalized downstream API; product requests never proxy AISafety live.
+4. **Preserve local ranking/editorial fields** on matched rows while updating upstream-owned title, description, URL, source org, dates, location, type, online/activity/enabled/status, verification, and upstream metadata.
+5. **Use safe last-good behavior**. Upstream-managed rows missing from a healthy sync are only disabled after the second consecutive healthy miss. Transient empty/bad responses make no database writes.
 
 Run the whole thing locally with:
 
 ```bash
 npm run sync
 ```
+
+Direct AISafety mirror commands:
+
+```bash
+npx tsx scripts/sync-aisafety.ts --dry-run
+npx tsx scripts/sync-aisafety.ts --collection communities,events,training
+npx tsx scripts/sync-aisafety.ts --dry-run --retire-legacy
+npx tsx scripts/sync-aisafety.ts --retire-legacy --max-retirements 250
+```
+
+`--retire-legacy` is intentionally explicit and is not enabled in scheduled runs. It disables unmatched generated legacy rows from old sources after a healthy AISafety API response, with a default maximum-retirement threshold.
+
+The older external gatherers and Claude evaluators remain available for manual/submitted discovery, but scheduled jobs no longer run AISafety Airtable/HTML scraping or AI re-verification for `source="aisafety"` rows.
 
 A separate Vercel cron (`vercel.json`) runs `/api/cron/guide-followups` daily to nudge people who booked guide calls.
 

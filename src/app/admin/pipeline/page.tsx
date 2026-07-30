@@ -4,17 +4,17 @@ const PIPELINES = [
   {
     href: "/admin/pipeline/events",
     title: "Events",
-    desc: "AISafety, EA Forum, LessWrong, Eventbrite, Luma, Meetup",
+    desc: "AISafety API sync + manual external discovery",
   },
   {
     href: "/admin/pipeline/communities",
     title: "Communities",
-    desc: "EA Forum, LessWrong, PauseAI, AISafety.com",
+    desc: "AISafety API sync + EA Forum, LessWrong, PauseAI",
   },
   {
     href: "/admin/pipeline/programs",
     title: "Programs",
-    desc: "BlueDot Impact courses + rounds",
+    desc: "AISafety training API sync; BlueDot manual",
   },
 ];
 
@@ -30,7 +30,7 @@ export default function PipelineHubPage() {
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Pipelines</h1>
         <p className="text-xs text-muted mt-1 font-mono">
-          Choose a pipeline to run gatherers and evaluators
+          Choose a sync or manual discovery pipeline
         </p>
       </div>
 

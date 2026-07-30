@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 import type { Resource } from "@/types";
+import { isResourceCurrent } from "@/lib/resource-currentness";
 import {
   stripInternalFields,
   apiHeaders,
@@ -67,17 +68,16 @@ export async function GET(request: Request) {
   const order = url.searchParams.get("order");
   const format = url.searchParams.get("format");
 
-  // Strip internal fields
-  let results = ((data as Resource[]) || []).map(stripInternalFields);
+  let resources = ((data as Resource[]) || []);
 
-  // By default, only show upcoming events (event_date >= today)
+  // By default, only show current/upcoming events. Multi-day events expire by
+  // event_end_date when present; application deadlines do not hide events.
   if (upcoming !== "false") {
-    const today = new Date().toISOString().slice(0, 10);
-    results = results.filter((r) => {
-      if (!r.event_date) return true; // events without dates are kept
-      return String(r.event_date) >= today;
-    });
+    resources = resources.filter((r) => isResourceCurrent(r));
   }
+
+  // Strip internal fields
+  let results = resources.map(stripInternalFields);
 
   // Apply filters
   if (q) {

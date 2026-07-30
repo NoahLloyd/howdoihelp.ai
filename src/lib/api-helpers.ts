@@ -9,6 +9,11 @@ const HIDDEN_FIELDS = new Set([
   "verified_at",
   "verification_notes",
   "submitted_by",
+  "upstream_managed",
+  "upstream_collection",
+  "upstream_last_seen_at",
+  "upstream_missing_count",
+  "upstream_payload_hash",
 ]);
 
 export function stripInternalFields(

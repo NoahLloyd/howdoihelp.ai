@@ -338,6 +338,7 @@ async function processQueue(force = false) {
     .from('event_candidates')
     .select('id')
     .in('status', statusFilter)
+    .neq('source', 'aisafety')
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -353,7 +354,8 @@ async function processQueue(force = false) {
   // Pre-filter to drop obvious junk before any LLM call.
   const { data: fullCandidates } = await getDb()
     .from('event_candidates')
-    .select('id, title, description, source_org, url')
+    .select('id, title, description, source, source_org, url')
+    .neq('source', 'aisafety')
     .in('id', candidates.map(c => c.id));
 
   const candidateEvents = (fullCandidates || []).map(c => ({

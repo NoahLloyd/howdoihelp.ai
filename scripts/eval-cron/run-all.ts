@@ -2,23 +2,18 @@
  * run-all.ts - The single command launchd invokes on schedule.
  *
  * Phases (in order):
- *   1. Gather + old-eval — runs the existing event/community/program
- *      pipelines that fetch new candidates from EA Forum, LessWrong, Luma,
- *      Eventbrite, Meetup, etc., and pass them through the v1 evaluator.
- *      This preserves the current "new content lands in the directory"
- *      behaviour that the GitHub Actions workflow used to provide.
- *   2. v2 reverify — re-checks every enabled community and upcoming event
- *      with the v2 (text + vision) pipeline and emits a Markdown report
- *      flagging rows that should be disabled.
+ *   1. AISafety API mirror — refreshes AISafety.com communities, events, and
+ *      training from the official public API into resources.
+ *   2. Lightweight cleanup — normalizes display fields that are cheap and
+ *      deterministic.
  *
- * Each phase swallows its own errors (continue-on-error semantics) so that
- * a flaky gatherer doesn't block the rest. The reverify report is the
- * primary artifact the user reviews.
+ * External candidate gatherers and AI evaluators remain available for manual
+ * discovery/submissions, but are not part of the scheduled run.
  *
  * Usage:
  *   npx tsx scripts/eval-cron/run-all.ts                # full run
- *   npx tsx scripts/eval-cron/run-all.ts --skip-gather  # only reverify
- *   npx tsx scripts/eval-cron/run-all.ts --skip-reverify # only gather + old-eval
+ *   npx tsx scripts/eval-cron/run-all.ts --skip-sync    # only cleanup
+ *   npx tsx scripts/eval-cron/run-all.ts --skip-cleanup # only AISafety sync
  */
 
 import * as dotenv from 'dotenv';
@@ -32,45 +27,26 @@ import * as path from 'node:path';
 const PROJECT_DIR = path.resolve(__dirname, '..', '..');
 
 // launchd fires daily at 11:00. We use internal floors so the heavy work
-// runs on the cadence we actually want:
-//   - gather + v1 eval (events/comms/programs): every 2 days (47h floor here)
-//   - v2 reverify on already-promoted resources: monthly (~30d floor inside
-//     reverify.ts itself, since the directory is now in good shape).
+// runs on the cadence we actually want.
 const MIN_RUN_INTERVAL_HOURS = 47;
 const LAST_RUN_FILE = path.join(os.homedir(), '.howdoihelpai-run-all-last-run');
 
 interface Phase {
   name: string;
   cmd: string[];
-  /** When true, the phase inherits CLAUDE_PROVIDER=cli for subscription. */
-  useCli: boolean;
+  kind: 'sync' | 'cleanup';
 }
 
 const PHASES: Phase[] = [
-  // Gather + v2 evaluator chain. Each gather script feeds new candidates into
-  // *_candidates and then runs evaluate-{event,community}.ts on them. The
-  // evaluators now use the v2 pipeline (Haiku stage 1 + Sonnet vision stage 2)
-  // plus a Sonnet metadata extractor — all on CLAUDE_PROVIDER=cli so the cost
-  // is the user's Claude Code subscription, not the paid API.
-  { name: 'events:   sync-all-events',      cmd: ['npx', 'tsx', 'scripts/sync-all-events.ts'],      useCli: true  },
-  { name: 'comms:    sync-all-communities', cmd: ['npx', 'tsx', 'scripts/sync-all-communities.ts'], useCli: true  },
-  { name: 'programs: sync-programs',         cmd: ['npx', 'tsx', 'scripts/sync-programs.ts'],        useCli: false },
-  { name: 'cleanup:  standardize-countries', cmd: ['npx', 'tsx', 'scripts/standardize-countries.ts'], useCli: false },
-  // v2 reverify on already-promoted resources. Walks every enabled community
-  // and upcoming event through the same v2 pipeline that gates new candidates.
-  { name: 'v2:       reverify',              cmd: ['npx', 'tsx', 'scripts/eval-cron/reverify.ts'],   useCli: true  },
-  // Post-reverify: classify EA/LW activity, mine other-reject reasoning,
-  // probe auth-walled liveness, and apply the dispositions to the DB. The
-  // driver is a no-op unless reverify produced a fresh report this cycle,
-  // so this is cheap on most fires.
-  { name: 'v2:       post-reverify',         cmd: ['npx', 'tsx', 'scripts/eval-cron/post-reverify.ts'], useCli: true  },
+  { name: 'aisafety: sync-aisafety',         cmd: ['npx', 'tsx', 'scripts/sync-aisafety.ts'], kind: 'sync' },
+  { name: 'cleanup:  standardize-countries', cmd: ['npx', 'tsx', 'scripts/standardize-countries.ts'], kind: 'cleanup' },
 ];
 
 function parseArgs() {
   const args = process.argv.slice(2);
   return {
-    skipGather: args.includes('--skip-gather'),
-    skipReverify: args.includes('--skip-reverify'),
+    skipSync: args.includes('--skip-sync') || args.includes('--skip-gather'),
+    skipCleanup: args.includes('--skip-cleanup') || args.includes('--skip-reverify'),
     force: args.includes('--force'),
   };
 }
@@ -97,13 +73,11 @@ async function markRan(): Promise<void> {
 
 async function runPhase(phase: Phase): Promise<{ ok: boolean; durationSec: number }> {
   const t0 = Date.now();
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  if (phase.useCli) env.CLAUDE_PROVIDER = 'cli';
 
   return new Promise(resolve => {
     const proc = spawn(phase.cmd[0], phase.cmd.slice(1), {
       cwd: PROJECT_DIR,
-      env,
+      env: { ...process.env },
       stdio: 'inherit',
     });
     proc.on('close', code => {
@@ -116,22 +90,21 @@ async function runPhase(phase: Phase): Promise<{ ok: boolean; durationSec: numbe
 }
 
 async function main() {
-  const { skipGather, skipReverify, force } = parseArgs();
+  const { skipSync, skipCleanup, force } = parseArgs();
   await checkLastRun(force);
 
   console.log('═'.repeat(60));
   console.log(`  HOWDOIHELP.AI scheduled run — ${new Date().toISOString()}`);
   console.log(`  cwd:        ${PROJECT_DIR}`);
-  console.log(`  gather:     ${skipGather ? 'SKIP' : 'on'}`);
-  console.log(`  reverify:   ${skipReverify ? 'SKIP (gated by its own 7-day floor when on)' : 'on'}`);
+  console.log(`  aisafety:   ${skipSync ? 'SKIP' : 'on'}`);
+  console.log(`  cleanup:    ${skipCleanup ? 'SKIP' : 'on'}`);
   console.log('═'.repeat(60));
 
   const summary: Array<{ name: string; ok: boolean; durationSec: number }> = [];
 
   for (const phase of PHASES) {
-    const isReverify = phase.name.startsWith('v2:');
-    if (skipGather && !isReverify) continue;
-    if (skipReverify && isReverify) continue;
+    if (skipSync && phase.kind === 'sync') continue;
+    if (skipCleanup && phase.kind === 'cleanup') continue;
 
     console.log(`\n▶ ${phase.name}`);
     const result = await runPhase(phase);
@@ -148,7 +121,7 @@ async function main() {
   }
   const failed = summary.filter(s => !s.ok).length;
   console.log(`\n  ${failed === 0 ? 'All phases ok.' : `${failed} phase(s) failed.`}`);
-  await markRan();
+  if (failed === 0) await markRan();
   process.exit(failed > 0 ? 1 : 0);
 }
 

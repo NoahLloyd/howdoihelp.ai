@@ -85,8 +85,11 @@ export interface Resource {
   status: ResourceStatus;
 
   event_date?: string;
+  event_end_date?: string;
+  event_time?: string;
   event_type?: string;
   deadline_date?: string;
+  is_online?: boolean;
 
   created_at: string;
   submitted_by?: string;
@@ -101,6 +104,12 @@ export interface Resource {
   url_status?: string;
   activity_score?: number;
   verification_notes?: string;
+
+  upstream_managed?: boolean;
+  upstream_collection?: "communities" | "events" | "training";
+  upstream_last_seen_at?: string;
+  upstream_missing_count?: number;
+  upstream_payload_hash?: string;
 }
 
 // ─── Ranking ────────────────────────────────────────────────

@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
     "seed": "tsx scripts/seed.ts",
     "sync": "npx tsx scripts/sync-all.ts"
   },

@@ -230,8 +230,8 @@ export function PipelineShell({
         </div>
         <p className="text-xs text-muted mt-1 font-mono">
           {mode === "dry-run"
-            ? "Dry run mode: data is fetched and displayed but NOT inserted into the database"
-            : "Live mode: data will be inserted into the candidates tables"}
+            ? "Dry run mode: data is fetched and planned but NOT written to the database"
+            : "Live mode: selected runners may write resource cache rows or candidate rows"}
         </p>
       </div>
 
@@ -276,7 +276,7 @@ export function PipelineShell({
         >
           {logs.length === 0 ? (
             <div className="text-zinc-600 text-center py-20">
-              Run a gatherer to see output here.
+              Run a sync or gatherer to see output here.
             </div>
           ) : (
             logs.map((entry, i) => (

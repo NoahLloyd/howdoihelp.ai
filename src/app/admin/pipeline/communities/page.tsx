@@ -20,10 +20,46 @@ export default function CommunitiesPipelinePage() {
         <>
           <p className="text-xs text-muted font-mono mb-3">
             {ctx.mode === "dry-run"
-              ? "Dry run mode: communities are fetched and displayed but NOT inserted into the database"
-              : "Live mode: communities will be inserted into the candidates table"}
+              ? "Dry run mode: data is fetched and planned but NOT written to the database"
+              : "Live mode: AISafety updates resources; external sync inserts candidates"}
           </p>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* AISafety API Sync */}
+            <div
+              className={`p-4 rounded-xl border transition-all duration-150 ${
+                ctx.activeScript === "sync-aisafety-communities"
+                  ? "bg-card border-amber-500/40 shadow-sm shadow-amber-500/10"
+                  : "bg-card border-border hover:border-border/80"
+              }`}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">AISafety API sync</h3>
+                  <p className="text-[11px] text-muted font-mono mt-0.5">
+                    Official API → resources cache
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className={`w-2 h-2 rounded-full ${ctx.statusColor(ctx.statuses["sync-aisafety-communities"] || "idle")} ${
+                      ctx.activeScript === "sync-aisafety-communities" ? "animate-pulse" : ""
+                    }`}
+                  />
+                  <span className="text-[10px] font-mono text-muted">
+                    {ctx.statusLabel(ctx.statuses["sync-aisafety-communities"] || "idle")}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => ctx.runScript("sync-aisafety-communities")}
+                disabled={!!ctx.activeScript}
+                className="w-full px-3 py-2 text-xs font-medium bg-foreground text-background rounded-md
+                  hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {ctx.activeScript === "sync-aisafety-communities" ? "Running..." : "Run"}
+              </button>
+            </div>
+
             {/* Sync Communities (gatherer) */}
             <div
               className={`p-4 rounded-xl border transition-all duration-150 ${
@@ -34,9 +70,9 @@ export default function CommunitiesPipelinePage() {
             >
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="text-sm font-medium text-foreground">Sync Communities</h3>
+                  <h3 className="text-sm font-medium text-foreground">External Community Candidates</h3>
                   <p className="text-[11px] text-muted font-mono mt-0.5">
-                    EA Forum, LessWrong, PauseAI, AISafety.com
+                    EA Forum, LessWrong, PauseAI
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -70,9 +106,9 @@ export default function CommunitiesPipelinePage() {
             >
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="text-sm font-medium text-foreground">Run All</h3>
+                  <h3 className="text-sm font-medium text-foreground">External Gather + Evaluate</h3>
                   <p className="text-[11px] text-muted font-mono mt-0.5">
-                    Full community pipeline
+                    Manual legacy candidate pipeline
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -92,7 +128,7 @@ export default function CommunitiesPipelinePage() {
                 className="w-full px-3 py-2 text-xs font-medium bg-foreground text-background rounded-md
                   hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
               >
-                {ctx.activeScript === "sync-all-communities" ? "Running..." : "Run Full Pipeline"}
+                {ctx.activeScript === "sync-all-communities" ? "Running..." : "Run Legacy Pipeline"}
               </button>
             </div>
 
@@ -106,9 +142,9 @@ export default function CommunitiesPipelinePage() {
             >
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="text-sm font-medium text-foreground">Community AI Evaluator</h3>
+                  <h3 className="text-sm font-medium text-foreground">Manual Community AI Evaluator</h3>
                   <p className="text-[11px] text-muted font-mono mt-0.5">
-                    Claude evaluates, scores, and auto-promotes or rejects community candidates
+                    Claude scores external/submitted community candidates
                   </p>
                 </div>
                 <div className="flex items-center gap-3">

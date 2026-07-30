@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
 import type { Resource, GeoData } from "@/types";
 import { getGeoData } from "@/lib/geo";
 import { SubmitForm } from "@/components/public/submit-form";
 import { CATEGORIES } from "@/lib/categories";
+import { isResourceCurrent } from "@/lib/resource-currentness";
 import { ArrowRight, MapPin, Calendar, Globe2, Search } from "lucide-react";
 
 interface EventsClientPageProps {
@@ -43,14 +43,7 @@ export function EventsClientPage({ resources }: EventsClientPageProps) {
 
   // Pre-process and filter
   const { localEvents, onlineEvents, otherEvents } = useMemo(() => {
-    const validEvents = resources.filter(r => {
-        if (r.event_date) {
-            const eventDate = new Date(r.event_date);
-            const today = new Date(new Date().setHours(0,0,0,0));
-            if (eventDate < today) return false;
-        }
-        return true;
-    });
+    const validEvents = resources.filter((r) => isResourceCurrent(r));
 
     const searchedEvents = search ? validEvents.filter(r => 
         r.title.toLowerCase().includes(search.toLowerCase()) || 
@@ -204,19 +197,6 @@ export function EventsClientPage({ resources }: EventsClientPageProps) {
                </table>
            </div>
         </div>
-      </div>
-
-      {/* API link */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 -mt-20 pb-16 text-center">
-        <p className="text-xs text-muted-foreground">
-          This data is available via our{" "}
-          <Link
-            href="/developers"
-            className="text-accent hover:underline"
-          >
-            free public API
-          </Link>
-        </p>
       </div>
 
       {showSubmit && (

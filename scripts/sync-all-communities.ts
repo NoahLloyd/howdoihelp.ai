@@ -27,7 +27,7 @@ export async function run(opts: { skipGather?: boolean; skipEvaluate?: boolean }
   // Phase 1: Gather
   if (!skipGather) {
     console.log('\n\n--- PHASE 1: GATHERING ---\n');
-    console.log('Running community sync (EA Forum, LessWrong, PauseAI, AISafety.com)...\n');
+    console.log('Running external community sync (EA Forum, LessWrong, PauseAI)...\n');
 
     try {
       await runSyncCommunities();
