@@ -417,6 +417,32 @@ test("planning increments missing counts and disables only on second healthy mis
   assert.equal(secondMiss.missing[0].update.enabled, false);
 });
 
+test("planning counts duplicate same-day cron misses only once", () => {
+  const responses = [envelope("events", [{ id: "evt_seen", name: "Seen", url: "https://seen.example" }])];
+  const duplicateMiss = planAisafetySync({
+    collections: ["events"],
+    responses,
+    existingResources: [
+      existing({
+        id: "missing-duplicate",
+        category: "events",
+        source: "aisafety",
+        source_id: "events:old",
+        upstream_managed: true,
+        upstream_collection: "events",
+        upstream_missing_count: 1,
+        verified_at: "2026-07-30T06:10:00.000Z",
+      }),
+    ],
+    now: NOW,
+  });
+
+  assert.equal(duplicateMiss.summary.disabledMissing, 0);
+  assert.equal(duplicateMiss.missing[0].nextMissingCount, 1);
+  assert.equal(duplicateMiss.missing[0].update.enabled, undefined);
+  assert.equal(duplicateMiss.missing[0].update.verified_at, NOW.toISOString());
+});
+
 test("legacy retirement does not bypass the grace period for mirrored rows", () => {
   const plan = planAisafetySync({
     collections: ["events"],

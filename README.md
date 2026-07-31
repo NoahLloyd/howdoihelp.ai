@@ -177,6 +177,11 @@ npx tsx scripts/sync-aisafety.ts --retire-legacy --max-retirements 250
 
 The older external gatherers and Claude evaluators remain available for manual/submitted discovery, but scheduled jobs no longer run AISafety Airtable/HTML scraping or AI re-verification for `source="aisafety"` rows.
 
+Vercel invokes `/api/cron/sync-aisafety` daily at 06:00 UTC. The route is
+protected by `CRON_SECRET`, runs the same validation and last-good safeguards as
+the CLI, and has a 60-second execution cap. Vercel Cron is the production
+scheduler; the local launchd/systemd helpers are only for optional manual use.
+
 A separate Vercel cron (`vercel.json`) runs `/api/cron/guide-followups` daily to nudge people who booked guide calls.
 
 ## Public API

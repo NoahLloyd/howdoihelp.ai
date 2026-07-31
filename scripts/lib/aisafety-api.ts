@@ -832,10 +832,20 @@ function planMissingRows(
     if (!resource.upstream_managed) continue;
     if (!isSelectedUpstreamCollection(resource.upstream_collection, selectedCollections)) continue;
 
-    const nextMissingCount = Math.max(0, Number(resource.upstream_missing_count || 0)) + 1;
-    const willDisable = nextMissingCount >= 2 && resource.enabled !== false;
+    const currentMissingCount = Math.max(0, Number(resource.upstream_missing_count || 0));
+    const alreadyCountedToday =
+      currentMissingCount > 0 &&
+      utcDateKey(resource.verified_at) === utcDateKey(nowIso);
+    const nextMissingCount = alreadyCountedToday
+      ? currentMissingCount
+      : currentMissingCount + 1;
+    const willDisable =
+      !alreadyCountedToday &&
+      nextMissingCount >= 2 &&
+      resource.enabled !== false;
     const update: Record<string, unknown> = {
       upstream_missing_count: nextMissingCount,
+      verified_at: nowIso,
     };
 
     if (willDisable) {
@@ -1173,6 +1183,14 @@ function sameValue(a: unknown, b: unknown): boolean {
   const normalizedA = normalizeComparable(a);
   const normalizedB = normalizeComparable(b);
   return JSON.stringify(normalizedA) === JSON.stringify(normalizedB);
+}
+
+function utcDateKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? null
+    : parsed.toISOString().slice(0, 10);
 }
 
 function normalizeComparable(value: unknown): unknown {

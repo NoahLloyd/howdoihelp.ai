@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { sendGuideFollowUpEmail } from "@/lib/email";
+import { getCronAuthFailure } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +21,12 @@ function getServiceClient() {
  * Protected by CRON_SECRET header.
  */
 export async function GET(req: Request) {
-  // Verify cron secret
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const authFailure = getCronAuthFailure(req);
+  if (authFailure) {
+    return Response.json(
+      { error: authFailure.error },
+      { status: authFailure.status },
+    );
   }
 
   const supabase = getServiceClient();

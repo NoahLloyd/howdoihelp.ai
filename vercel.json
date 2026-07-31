@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/guide-followups",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/sync-aisafety",
+      "schedule": "0 6 * * *"
     }
   ]
 }
