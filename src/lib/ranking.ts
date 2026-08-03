@@ -167,13 +167,19 @@ function profileFit(resource: Resource, profilePlatform?: ProfilePlatform): numb
 }
 
 function activityFit(resource: Resource): number {
-  // activity_score is 0–1, only set on communities/events from verification.
+  // Activity is a freshness signal for communities and events. Programs use
+  // deadlines/currentness instead; applying the admin default activity score
+  // to them would incorrectly treat a good program as only 60% as valuable.
+  if (resource.category !== "communities" && resource.category !== "events") {
+    return 1.0;
+  }
+
   // If not set, assume decent quality.
   const score = resource.activity_score;
   if (score == null) return 1.0;
   // Anything below 0.2 is basically dead - hard zero, should never appear
   if (score < 0.2) return 0;
-  // Scale so 0.2→0.4, 0.5→0.7, 1.0→1.0
+  // Scale so 0.2→0.36, 0.5→0.6, 1.0→1.0
   return 0.2 + score * 0.8;
 }
 
