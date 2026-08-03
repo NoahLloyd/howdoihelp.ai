@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { AlmaAttribution } from "@/components/brand/alma-attribution";
 
 const fade = (delay: number = 0) => ({
   initial: { opacity: 0, y: 16 },
@@ -137,16 +138,10 @@ export function AboutContent() {
             >
               open source
             </a>{" "}
-            under the MIT license. Built by{" "}
-            <a
-              href="https://noahlr.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-foreground hover:text-accent transition-colors"
-            >
-              Noah Lloyd Robson
-            </a>.
+            under the MIT license.
           </p>
+
+          <AlmaAttribution className="mt-5" />
         </motion.div>
       </div>
     </div>

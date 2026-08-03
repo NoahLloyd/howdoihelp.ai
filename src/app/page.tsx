@@ -2,10 +2,11 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { AlmaAttribution } from "@/components/brand/alma-attribution";
 
 export default function Home() {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center px-5">
+    <main className="relative flex min-h-dvh flex-col items-center justify-center px-5 pb-20">
       <motion.div
         className="mb-10 text-center"
         initial={{ opacity: 0, y: 16 }}
@@ -93,6 +94,15 @@ export default function Home() {
           </Link>
         </motion.div>
       </div>
+
+      <motion.div
+        className="absolute inset-x-0 bottom-7 flex justify-center px-5"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.55, duration: 0.4 }}
+      >
+        <AlmaAttribution className="text-xs" />
+      </motion.div>
     </main>
   );
 }

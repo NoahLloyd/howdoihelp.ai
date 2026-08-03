@@ -225,4 +225,4 @@ Issues and pull requests welcome. The codebase is small enough to read end to en
 
 ## License
 
-MIT. Built by [Noah Lloyd Robson](https://noahlr.com). Questions: n@noahlr.com.
+MIT. A project by [Alma](https://www.almagrants.com). Questions: n@noahlr.com.
