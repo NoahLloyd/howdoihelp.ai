@@ -22,14 +22,17 @@ import type {
 import { ResourceCard } from "@/components/results/resource-card";
 import { LocationPicker } from "@/components/results/location-picker";
 import { BrowseSkeleton } from "@/components/ui/skeletons";
+import {
+  assignActionSub,
+  sortActions,
+  sortByImpact,
+  type ActionSubId,
+} from "@/lib/browse-actions";
 
 
 // ─── Path definitions ─────────────────────────────────────────
 
 type PathId = "act" | "learn" | "connect";
-
-/** Sub-categories within "Take action" */
-type ActionSubId = "quick" | "involved" | "career";
 
 interface PathDef {
   id: PathId;
@@ -69,20 +72,6 @@ const OTHER_PATH_MAP: Record<string, PathId> = {
   "mentor-others": "act",
 };
 
-/** Maps "other"-category resources to an action sub-category */
-const ACTION_SUB_MAP: Record<string, ActionSubId> = {
-  "aisafety-chatbot": "quick",
-  "fli-asset-pack": "quick",
-  "controlai-legislators": "involved",
-  "tabling": "involved",
-  "create-content": "involved",
-  "donation-guide": "involved",
-  "80k-ai-safety": "career",
-  "80k-job-board": "career",
-  "volunteer-projects": "career",
-  "mentor-others": "career",
-};
-
 function assignPath(resource: Resource): PathId {
   switch (resource.category) {
     case "letters": return "act";
@@ -92,17 +81,6 @@ function assignPath(resource: Resource): PathId {
     case "other": return OTHER_PATH_MAP[resource.id] ?? "act";
     default: return "act";
   }
-}
-
-function assignActionSub(resource: Resource): ActionSubId {
-  if (resource.category === "letters") return "quick";
-  return ACTION_SUB_MAP[resource.id] ?? "involved";
-}
-
-function sortByImpact(a: Resource, b: Resource): number {
-  const ratioA = a.ev_general / Math.max(a.friction, 0.01);
-  const ratioB = b.ev_general / Math.max(b.friction, 0.01);
-  return ratioB - ratioA;
 }
 
 function sortByEventDate(a: Resource, b: Resource): number {
@@ -511,12 +489,11 @@ function ResourceList({
   );
 }
 
-// ─── Action Explorer (quick / get involved / career) ──────────
+// ─── Action Explorer (quick / go further) ─────────────────────
 
 const ACTION_TABS: { id: ActionSubId; label: string }[] = [
   { id: "quick", label: "Quick" },
-  { id: "involved", label: "Go further" },
-  { id: "career", label: "Career" },
+  { id: "further", label: "Go further" },
 ];
 
 interface ActionExplorerProps {
@@ -532,50 +509,43 @@ function ActionExplorer({ resources, variant, onClickTrack }: ActionExplorerProp
     () => resources.filter((r) => assignActionSub(r) === "quick"),
     [resources]
   );
-  const involved = useMemo(
-    () => resources.filter((r) => assignActionSub(r) === "involved"),
-    [resources]
-  );
-  const career = useMemo(
-    () => resources.filter((r) => assignActionSub(r) === "career"),
+  const further = useMemo(
+    () => resources.filter((r) => assignActionSub(r) === "further"),
     [resources]
   );
 
-  const defaultTab: ActionSubId = quick.length > 0 ? "quick" : involved.length > 0 ? "involved" : "career";
+  const defaultTab: ActionSubId = quick.length > 0 ? "quick" : "further";
   const [tab, setTab] = useState<ActionSubId>(defaultTab);
 
   // Switch if current tab becomes empty
   useEffect(() => {
-    const pool = tab === "quick" ? quick : tab === "involved" ? involved : career;
+    const pool = tab === "quick" ? quick : further;
     if (pool.length === 0) {
       if (quick.length > 0) setTab("quick");
-      else if (involved.length > 0) setTab("involved");
-      else if (career.length > 0) setTab("career");
+      else if (further.length > 0) setTab("further");
     }
-  }, [tab, quick.length, involved.length, career.length, quick, involved, career]);
+  }, [tab, quick.length, further.length, quick, further]);
 
   const visibleTabs = useMemo(() => {
     const tabs: { id: ActionSubId; label: string }[] = [];
     if (quick.length > 0) tabs.push(ACTION_TABS[0]);
-    if (involved.length > 0) tabs.push(ACTION_TABS[1]);
-    if (career.length > 0) tabs.push(ACTION_TABS[2]);
+    if (further.length > 0) tabs.push(ACTION_TABS[1]);
     return tabs;
-  }, [quick.length, involved.length, career.length]);
+  }, [quick.length, further.length]);
 
-  const pool = tab === "quick" ? quick : tab === "involved" ? involved : career;
+  const pool = tab === "quick" ? quick : further;
 
   const filtered = useMemo(() => {
     let items = pool;
     if (search) {
       items = items.filter((r) => matchesSearch(r, search));
     }
-    return [...items].sort(sortByImpact);
+    return [...items].sort(sortActions);
   }, [pool, search]);
 
   const tabCounts: Record<ActionSubId, number> = {
     quick: quick.length,
-    involved: involved.length,
-    career: career.length,
+    further: further.length,
   };
 
   return (
@@ -611,7 +581,7 @@ function ActionExplorer({ resources, variant, onClickTrack }: ActionExplorerProp
       <SearchInput
         value={search}
         onChange={setSearch}
-        placeholder={`Search ${tab === "quick" ? "quick actions" : tab === "career" ? "career resources" : "resources"}...`}
+        placeholder={`Search ${tab === "quick" ? "quick actions" : "resources"}...`}
       />
 
       <ResourceList

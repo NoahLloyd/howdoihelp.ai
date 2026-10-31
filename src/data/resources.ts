@@ -405,6 +405,38 @@ export const resources: Resource[] = [
     created_at: "2026-02-19T00:00:00Z",
   },
   {
+    id: "ifanyonebuildsit-act",
+    title: "🇺🇸 Call, write, or email your representatives",
+    description:
+      "US only. From the authors of If Anyone Builds It, Everyone Dies: tell Congress to stop superintelligent AI development.",
+    url: "https://ifanyonebuildsit.com/act",
+    source_org: "If Anyone Builds It",
+    category: "other",
+    location: "US only",
+    min_minutes: 5,
+    ev_general: 0.55,
+    friction: 0.2,
+    enabled: true,
+    status: "approved",
+    created_at: "2026-10-31T00:00:00Z",
+  },
+  {
+    id: "callcongress",
+    title: "🇺🇸 Call Congress about AI",
+    description:
+      "US only. Get a call script and reach your House and Senate offices.",
+    url: "https://callcongress.ai",
+    source_org: "CallCongress.ai",
+    category: "other",
+    location: "US only",
+    min_minutes: 5,
+    ev_general: 0.55,
+    friction: 0.2,
+    enabled: true,
+    status: "approved",
+    created_at: "2026-10-31T00:00:00Z",
+  },
+  {
     id: "tabling",
     title: "Set up a table on campus or in your community",
     description:
