@@ -1,6 +1,9 @@
 -- Adds two US contact tools, which appear in the Quick tab on the browse page.
 -- The code pins them there, so their scores stay at the same level as the
--- ControlAI card and other flows keep their current ranking.
+-- ControlAI card.
+--
+-- Their location is "US only". Ranked flows can place them near the top for US
+-- visitors and rank them low for everyone else.
 --
 -- Rerunning this is safe, because existing rows are left alone.
 
@@ -11,8 +14,8 @@ insert into resources (
 values
   (
     'ifanyonebuildsit-act',
-    '🇺🇸 Call, write, or email your representatives',
-    'US only. From the authors of If Anyone Builds It, Everyone Dies: tell Congress to stop superintelligent AI development.',
+    'Call, write, or email your representatives',
+    'From the authors of If Anyone Builds It, Everyone Dies: tell Congress to stop superintelligent AI development.',
     'https://ifanyonebuildsit.com/act',
     'If Anyone Builds It',
     'other',
@@ -25,8 +28,8 @@ values
   ),
   (
     'callcongress',
-    '🇺🇸 Call Congress about AI',
-    'US only. Get a call script and reach your House and Senate offices.',
+    'Call Congress about AI',
+    'Get a call script and reach your House and Senate offices.',
     'https://callcongress.ai',
     'CallCongress.ai',
     'other',

@@ -406,9 +406,9 @@ export const resources: Resource[] = [
   },
   {
     id: "ifanyonebuildsit-act",
-    title: "🇺🇸 Call, write, or email your representatives",
+    title: "Call, write, or email your representatives",
     description:
-      "US only. From the authors of If Anyone Builds It, Everyone Dies: tell Congress to stop superintelligent AI development.",
+      "From the authors of If Anyone Builds It, Everyone Dies: tell Congress to stop superintelligent AI development.",
     url: "https://ifanyonebuildsit.com/act",
     source_org: "If Anyone Builds It",
     category: "other",
@@ -422,9 +422,9 @@ export const resources: Resource[] = [
   },
   {
     id: "callcongress",
-    title: "🇺🇸 Call Congress about AI",
+    title: "Call Congress about AI",
     description:
-      "US only. Get a call script and reach your House and Senate offices.",
+      "Get a call script and reach your House and Senate offices.",
     url: "https://callcongress.ai",
     source_org: "CallCongress.ai",
     category: "other",

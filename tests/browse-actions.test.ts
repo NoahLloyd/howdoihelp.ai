@@ -57,6 +57,5 @@ test("the US contact tools are labeled in the seed list", () => {
     const row = resources.find((r) => r.id === id);
     assert.ok(row, `${id} is missing`);
     assert.equal(row.location, "US only");
-    assert.ok(row.title.startsWith("🇺🇸"));
   }
 });
