@@ -68,10 +68,23 @@ PERPLEXITY_API_KEY=                # web search for profile enrichment
 NEXT_PUBLIC_POSTHOG_KEY=           # product analytics
 NEXT_PUBLIC_POSTHOG_HOST=
 NEXT_PUBLIC_SENTRY_DSN=            # error reporting
-ADMIN_PASSWORD=                    # gates /admin
+ADMIN_PASSWORD=                    # required for /admin; no default password
+ADMIN_SESSION_SECRET=              # random secret of at least 32 characters
+VISITOR_SESSION_SECRET=            # separate random secret of at least 32 characters
 ```
 
 If Supabase is not configured, the app falls back to the seed list in `src/data/resources.ts` and most things still work.
+
+Admin sessions are signed, expire after one week, and are revoked by rotating
+either the admin password or session secret. Keep these variables server-only
+and use different production and development secrets.
+
+Apply `supabase/migrations/014_secure_private_visitor_data.sql` to protect visitor
+records, account profiles and API usage. Visitor profile saving uses `/api/visitor`
+with a signed HttpOnly cookie; client-supplied IDs never authorize access. Legacy
+localStorage IDs are retained only for analytics until a server session is issued.
+Account owners can still read their own profiles. Public guide recommendations
+receive only the active guides' display fields from the server.
 
 To populate a fresh Supabase from the seed file:
 

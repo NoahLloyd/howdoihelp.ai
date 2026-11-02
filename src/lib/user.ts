@@ -1,4 +1,3 @@
-import { getSupabase } from "./supabase";
 import type { EnrichedProfile, UserAnswers, RecommendedResource } from "@/types";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -34,21 +33,18 @@ export function getUserId(): string {
 // ─── CRUD ───────────────────────────────────────────────────
 
 export async function getUser(id: string): Promise<UserRecord | null> {
-  const supabase = getSupabase();
-  if (!supabase) return null;
-
-  const { data, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error || !data) return null;
-  return data as UserRecord;
+  try {
+    const response = await fetch("/api/visitor", { cache: "no-store" });
+    if (!response.ok) return null;
+    const data = await response.json() as UserRecord | null;
+    return data?.id === id ? data : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function upsertUser(
-  id: string,
+  _id: string,
   updates: {
     profile_data?: EnrichedProfile;
     profile_platform?: string;
@@ -58,21 +54,17 @@ export async function upsertUser(
     last_recommendations?: RecommendedResource[];
   }
 ): Promise<void> {
-  const supabase = getSupabase();
-  if (!supabase) return;
-
-  const now = new Date().toISOString();
-
-  await supabase
-    .from("users")
-    .upsert(
-      {
-        id,
-        ...updates,
-        last_visit_at: now,
-        updated_at: now,
-      },
-      { onConflict: "id" }
-    )
-    .then(() => {}, () => {});
+  try {
+    const response = await fetch("/api/visitor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (response.ok) {
+      const { id } = await response.json() as { id: string };
+      localStorage.setItem(USER_ID_KEY, id);
+    }
+  } catch {
+    // Persistence is best-effort; recommendations still work without it.
+  }
 }

@@ -1,7 +1,10 @@
 "use server";
 
 import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { requireAdmin as verifyAdmin } from "@/lib/admin-auth";
+import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_MAX_AGE, createAdminSession, isValidAdminPassword } from "@/lib/admin-session";
+import { checkRateLimit } from "@/lib/rate-limit";
 import type { Resource, ResourceCategory } from "@/types";
 import type { PromptKey, PromptVersion } from "@/lib/prompts";
 import { clearPromptCache } from "@/lib/prompts";
@@ -20,26 +23,21 @@ function getServiceClient() {
 // ─── Auth ───────────────────────────────────────────────────
 
 export async function loginAdmin(password: string): Promise<boolean> {
-  const validPassword = process.env.ADMIN_PASSWORD || "a#31yn6:bdPf";
-  // Trim to handle rogue spaces from copy/pasting or env parsing
-  if (password.trim() === validPassword.trim()) {
-    (await cookies()).set("admin_session", "authenticated", {
+  const requestHeaders = await headers();
+  const ip = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (!checkRateLimit(ip, { bucket: "admin-login", windowMs: 15 * 60_000, maxRequests: 10 }).allowed) return false;
+  if (isValidAdminPassword(password)) {
+    const session = createAdminSession();
+    (await cookies()).set(ADMIN_SESSION_COOKIE, session, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 1 week
+      maxAge: ADMIN_SESSION_MAX_AGE,
       path: "/",
     });
     return true;
   }
   return false;
-}
-
-async function verifyAdmin() {
-  const session = (await cookies()).get("admin_session");
-  if (!session || session.value !== "authenticated") {
-    throw new Error("Unauthorized");
-  }
 }
 
 

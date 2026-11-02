@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { requireAdmin } from "@/lib/admin-auth";
 
 // Gatherers
 import { run as runGatherAisafety } from "@scripts/gatherers/gather-aisafety";
@@ -141,9 +141,9 @@ export const maxDuration = 300;
 
 export async function GET(req: Request) {
   // Auth check
-  const cookieStore = await cookies();
-  const session = cookieStore.get("admin_session");
-  if (!session || session.value !== "authenticated") {
+  try {
+    await requireAdmin(req);
+  } catch {
     return new Response("Unauthorized", { status: 401 });
   }
 

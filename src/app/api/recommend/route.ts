@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 import { llmComplete, extractJson } from "@/lib/llm";
 import { getActivePrompt, interpolateTemplate } from "@/lib/prompts";
 import { scoreResource } from "@/lib/ranking";
@@ -59,7 +60,14 @@ async function fetchActiveGuides(): Promise<GuideWithProfile[]> {
   if (!guides || guides.length === 0) return [];
 
   const guideIds = guides.map((g: { id: string }) => g.id);
-  const { data: profiles } = await supabase
+  // Account profiles are private. Only this server-side projection of already
+  // active guides is used for public recommendations; never include email.
+  const profileClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const { data: profiles } = await profileClient
     .from("profiles")
     .select("id, display_name, avatar_url, bio")
     .in("id", guideIds);
