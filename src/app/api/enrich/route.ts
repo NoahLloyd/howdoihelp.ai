@@ -1,14 +1,13 @@
 import { enrichProfile } from "@/lib/enrich";
 import { detectPlatform } from "@/lib/profile";
-import { getSupabase } from "@/lib/supabase";
-import type { ApiUsageEntry } from "@/types";
+import { logApiUsage } from "@/lib/api-usage";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { url, email, userId } = body as {
+    const { url, email } = body as {
       url?: string;
       email?: string;
       userId?: string;
@@ -22,15 +21,7 @@ export async function POST(req: Request) {
     const { profile, usageLog } = await enrichProfile({ url, email, platform });
 
     // Log usage to Supabase
-    const supabase = getSupabase();
-    if (supabase && usageLog.length > 0) {
-      const rows = usageLog.map((entry) => ({
-        ...entry,
-        user_id: userId || undefined,
-      }));
-
-      await supabase.from("api_usage").insert(rows).then(() => {}, () => {});
-    }
+    await logApiUsage(usageLog);
 
     if (!profile) {
       return Response.json(

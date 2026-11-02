@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
+import { logApiUsage } from "@/lib/api-usage";
 import { llmComplete, extractJson } from "@/lib/llm";
 import { getActivePrompt, interpolateTemplate } from "@/lib/prompts";
 import { scoreResource } from "@/lib/ranking";
@@ -213,7 +214,7 @@ interface RecommendRequest {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as RecommendRequest;
-    const { profile, answers, geo, resources, userId } = body;
+    const { profile, answers, geo, resources } = body;
 
     if (!resources?.length) {
       return Response.json({ error: "resources required" }, { status: 400 });
@@ -310,22 +311,7 @@ export async function POST(req: Request) {
 
     // Log usage to Supabase
     const { usage } = result;
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase
-        .from("api_usage")
-        .insert({
-          provider: usage.provider,
-          model: usage.model,
-          endpoint: usage.endpoint,
-          input_tokens: usage.input_tokens,
-          output_tokens: usage.output_tokens,
-          estimated_cost_usd: usage.estimated_cost_usd,
-          user_id: userId || undefined,
-          prompt_version: activePrompt.version || undefined,
-        })
-        .then(() => {}, () => {});
-    }
+    await logApiUsage([{ ...usage, prompt_version: activePrompt.version || undefined }]);
 
     return Response.json({
       recommendations,
