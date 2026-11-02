@@ -1,18 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { requireAdmin as verifyAdmin } from "@/lib/admin-auth";
 import OpenAI from "openai";
 import { llmComplete, extractJson } from "@/lib/llm";
 import { searchPerson as exaSearch } from "@/lib/exa";
 import { searchPerson as tavilySearch } from "@/lib/tavily";
 
 export const dynamic = "force-dynamic";
-
-async function verifyAdmin() {
-  const session = (await cookies()).get("admin_session");
-  if (!session || session.value !== "authenticated") {
-    throw new Error("Unauthorized");
-  }
-}
 
 interface RunPromptRequest {
   promptKey: "recommend" | "extract" | "search" | "evaluate-event" | "evaluate-community";
@@ -25,7 +18,7 @@ interface RunPromptRequest {
 
 export async function POST(req: Request) {
   try {
-    await verifyAdmin();
+    await verifyAdmin(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

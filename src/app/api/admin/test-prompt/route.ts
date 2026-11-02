@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { requireAdmin as verifyAdmin } from "@/lib/admin-auth";
 import OpenAI from "openai";
 import { searchPerson as exaSearch } from "@/lib/exa";
 import { searchPerson as tavilySearch } from "@/lib/tavily";
@@ -11,16 +11,9 @@ const PERPLEXITY_MODEL = "sonar";
 
 type Provider = "perplexity" | "exa" | "tavily";
 
-async function verifyAdmin() {
-  const session = (await cookies()).get("admin_session");
-  if (!session || session.value !== "authenticated") {
-    throw new Error("Unauthorized");
-  }
-}
-
 export async function POST(req: Request) {
   try {
-    await verifyAdmin();
+    await verifyAdmin(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -36,7 +36,7 @@ export async function searchPerson(query: string): Promise<{
     const results = await client.searchAndContents(query, {
       type: "auto",
       numResults: 10,
-      category: "people" as "tweet", // SDK types lag behind API — "people" is valid
+      category: "people",
       highlights: {
         maxCharacters: 4000,
       },
