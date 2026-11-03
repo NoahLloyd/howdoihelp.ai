@@ -1,9 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { fetchResources } from "@/lib/data";
-import { applyCreatorOverrides } from "@/lib/data";
 import type { CreatorOverrides } from "@/lib/data";
 import { ProfileStep } from "@/components/funnel/profile-step";
 import { Results } from "@/components/funnel/results";
@@ -20,7 +18,6 @@ import type {
   UserAnswers,
   ProfilePlatform,
   GeoData,
-  Resource,
   TimeCommitment,
   IntentTag,
 } from "@/types";
@@ -48,15 +45,6 @@ export function CreatorFlow({ flowConfig, overrides, slug }: CreatorFlowProps) {
   const [precomputedItems, setPrecomputedItems] = useState<ResultItem[] | null>(null);
   const [precomputedGeo, setPrecomputedGeo] = useState<GeoData | null>(null);
   const [showProcessing, setShowProcessing] = useState(false);
-
-  // Override resources for browse variant
-  const [filteredResources, setFilteredResources] = useState<Resource[] | null>(null);
-
-  useEffect(() => {
-    fetchResources().then((resources) => {
-      setFilteredResources(applyCreatorOverrides(resources, overrides));
-    });
-  }, [overrides]);
 
   // Push virtual history entries for back button support
   useEffect(() => {
@@ -125,6 +113,7 @@ export function CreatorFlow({ flowConfig, overrides, slug }: CreatorFlowProps) {
         platform={processingPlatform}
         variant="A"
         profileText={processingProfileText}
+        overrides={overrides}
         onComplete={handleProcessingComplete}
       />
     );
@@ -162,7 +151,7 @@ export function CreatorFlow({ flowConfig, overrides, slug }: CreatorFlowProps) {
 
     case "results":
       if (currentStep.style === "browse") {
-        return <BrowseResults variant="B" />;
+        return <BrowseResults variant="B" overrides={overrides} />;
       }
       return (
         <Results
@@ -170,6 +159,7 @@ export function CreatorFlow({ flowConfig, overrides, slug }: CreatorFlowProps) {
           answers={answers}
           precomputedItems={precomputedItems ?? undefined}
           precomputedGeo={precomputedGeo ?? undefined}
+          overrides={overrides}
         />
       );
 

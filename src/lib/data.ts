@@ -103,3 +103,11 @@ export function applyCreatorOverrides(
       return { ...r, ev_general: evGeneral };
     });
 }
+
+/** Fetch resources with a creator page's overrides applied, if it has any. */
+export async function fetchResourcesWithOverrides(
+  overrides?: CreatorOverrides
+): Promise<Resource[]> {
+  const resources = await fetchResources();
+  return overrides ? applyCreatorOverrides(resources, overrides) : resources;
+}
