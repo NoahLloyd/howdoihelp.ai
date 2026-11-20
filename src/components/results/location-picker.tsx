@@ -9,14 +9,22 @@ interface LocationPickerProps {
   onLocationChange: (geo: GeoData) => void;
   /** Auto-open the editor on mount (used when geo detection fails) */
   autoOpen?: boolean;
+  /** Which edge of the pill the popover lines up with */
+  align?: "left" | "right";
+}
+
+interface LocationMatch {
+  label: string;
+  geo: GeoData;
 }
 
 /** Inline clickable location that opens a popover editor */
-export function LocationPicker({ geo, onLocationChange, autoOpen }: LocationPickerProps) {
+export function LocationPicker({ geo, onLocationChange, autoOpen, align = "left" }: LocationPickerProps) {
   const [open, setOpen] = useState(false);
   const autoOpenedRef = useRef(false);
   const [value, setValue] = useState("");
   const [loading, setLoading] = useState(false);
+  const [matches, setMatches] = useState<LocationMatch[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLSpanElement>(null);
 
@@ -27,6 +35,8 @@ export function LocationPicker({ geo, onLocationChange, autoOpen }: LocationPick
     : geo.country !== "Unknown"
       ? geo.country
       : "your area";
+  const fullLabel =
+    displayCity && geo.country !== "Unknown" ? `${displayCity}, ${geo.country}` : displayLabel;
 
   // Auto-open when geo detection fails
   useEffect(() => {
@@ -72,7 +82,14 @@ export function LocationPicker({ geo, onLocationChange, autoOpen }: LocationPick
   function handleOpen(e: React.MouseEvent) {
     e.stopPropagation();
     setValue(displayCity || "");
+    setMatches([]);
     setOpen(true);
+  }
+
+  function choose(newGeo: GeoData) {
+    onLocationChange(newGeo);
+    setMatches([]);
+    setOpen(false);
   }
 
   async function handleSubmit() {
@@ -83,10 +100,13 @@ export function LocationPicker({ geo, onLocationChange, autoOpen }: LocationPick
     }
 
     setLoading(true);
-    const newGeo = await geocodeLocation(trimmed, geo);
+    const found = await searchLocations(trimmed, geo);
     setLoading(false);
-    onLocationChange(newGeo);
-    setOpen(false);
+    if (found.length > 1) {
+      setMatches(found);
+    } else {
+      choose(found[0]?.geo ?? { ...geo, city: trimmed, region: undefined });
+    }
   }
 
   return (
@@ -96,6 +116,7 @@ export function LocationPicker({ geo, onLocationChange, autoOpen }: LocationPick
         tabIndex={0}
         onClick={handleOpen}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpen(e as unknown as React.MouseEvent); }}
+        title={`Your location: ${fullLabel}. Click to change.`}
         className="ml-1 inline-flex cursor-pointer items-center gap-1 rounded-full border border-border bg-card px-2.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:border-accent/40 hover:bg-accent/5 hover:text-accent"
       >
         <svg
@@ -122,7 +143,7 @@ export function LocationPicker({ geo, onLocationChange, autoOpen }: LocationPick
             transition={{ duration: 0.15, ease: "easeOut" }}
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
-            className="absolute left-0 top-full z-50 mt-2 w-64 rounded-xl border border-border bg-card p-3 shadow-lg"
+            className={`absolute ${align === "right" ? "right-0" : "left-0"} top-full z-50 mt-2 w-64 rounded-xl border border-border bg-card p-3 shadow-lg`}
           >
             <p className="mb-2 text-xs font-medium text-muted-foreground">
               Show results near
@@ -132,7 +153,7 @@ export function LocationPicker({ geo, onLocationChange, autoOpen }: LocationPick
                 ref={inputRef}
                 type="text"
                 value={value}
-                onChange={(e) => setValue(e.target.value)}
+                onChange={(e) => { setValue(e.target.value); setMatches([]); }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSubmit();
                 }}
@@ -158,6 +179,21 @@ export function LocationPicker({ geo, onLocationChange, autoOpen }: LocationPick
                 </svg>
               </button>
             </div>
+            {matches.length > 1 && (
+              <ul className="mt-2 flex flex-col">
+                {matches.map((m) => (
+                  <li key={m.label}>
+                    <button
+                      type="button"
+                      onClick={() => choose(m.geo)}
+                      className="w-full rounded-lg px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent/5 hover:text-accent"
+                    >
+                      {m.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -165,17 +201,33 @@ export function LocationPicker({ geo, onLocationChange, autoOpen }: LocationPick
   );
 }
 
-/** Resolve a location string into GeoData using Nominatim */
-async function geocodeLocation(
+interface NominatimAddress {
+  city?: string;
+  town?: string;
+  village?: string;
+  municipality?: string;
+  state?: string;
+  county?: string;
+  country?: string;
+  country_code?: string;
+}
+
+/**
+ * Look up a typed place with OpenStreetMap (Nominatim) and return its top
+ * matches in English, each labeled with its country. An empty list means
+ * nothing was found or the lookup failed.
+ */
+async function searchLocations(
   query: string,
   fallback: GeoData
-): Promise<GeoData> {
+): Promise<LocationMatch[]> {
   try {
     const params = new URLSearchParams({
       q: query,
       format: "json",
-      limit: "1",
+      limit: "5",
       addressdetails: "1",
+      "accept-language": "en",
     });
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?${params}`,
@@ -186,30 +238,31 @@ async function geocodeLocation(
     );
     if (!res.ok) throw new Error("Nominatim request failed");
 
-    const results = await res.json();
-    if (results.length === 0) {
-      return { ...fallback, city: query, region: undefined };
-    }
+    const results: { address?: NominatimAddress }[] = await res.json();
+    const places = results.map(({ address: addr = {} }) => {
+      const geo: GeoData = {
+        country: addr.country || fallback.country,
+        countryCode: (addr.country_code || fallback.countryCode).toUpperCase(),
+        city: addr.city || addr.town || addr.village || addr.municipality || undefined,
+        region: addr.state || addr.county || undefined,
+        timezone: fallback.timezone,
+        isAuthoritarian: fallback.isAuthoritarian,
+      };
+      const name = geo.city || geo.region;
+      return { geo, short: name ? `${name}, ${geo.country}` : geo.country };
+    });
 
-    const place = results[0];
-    const addr = place.address || {};
-    const city =
-      addr.city || addr.town || addr.village || addr.municipality || query;
-    const region = addr.state || addr.county || undefined;
-    const country = addr.country || fallback.country;
-    const countryCode = (
-      addr.country_code || fallback.countryCode
-    ).toUpperCase();
-
-    return {
-      country,
-      countryCode,
-      city,
-      region,
-      timezone: fallback.timezone,
-      isAuthoritarian: fallback.isAuthoritarian,
-    };
+    // Several matches in one country also show their region, such as a US state
+    const matches: LocationMatch[] = places.map(({ geo, short }) => {
+      const sameCountry = places.filter((p) => p.geo.country === geo.country).length;
+      const label =
+        sameCountry > 1 && geo.city && geo.region
+          ? `${geo.city}, ${geo.region}, ${geo.country}`
+          : short;
+      return { label, geo };
+    });
+    return matches.filter((m, i) => matches.findIndex((o) => o.label === m.label) === i);
   } catch {
-    return { ...fallback, city: query, region: undefined };
+    return [];
   }
 }
