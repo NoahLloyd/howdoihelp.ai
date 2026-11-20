@@ -381,7 +381,7 @@ export const resources: Resource[] = [
     source_org: "ControlAI",
     category: "other",
     location: "Global",
-    min_minutes: 15,
+    min_minutes: 5,
     ev_general: 0.55,
     friction: 0.1,
     enabled: true,

@@ -238,8 +238,8 @@ async function searchLocations(
     );
     if (!res.ok) throw new Error("Nominatim request failed");
 
-    const results: { address?: NominatimAddress }[] = await res.json();
-    const places = results.map(({ address: addr = {} }) => {
+    const results: { name?: string; address?: NominatimAddress }[] = await res.json();
+    const places = results.map(({ name: placeName, address: addr = {} }) => {
       const geo: GeoData = {
         country: addr.country || fallback.country,
         countryCode: (addr.country_code || fallback.countryCode).toUpperCase(),
@@ -248,18 +248,19 @@ async function searchLocations(
         timezone: fallback.timezone,
         isAuthoritarian: fallback.isAuthoritarian,
       };
-      const name = geo.city || geo.region;
-      return { geo, short: name ? `${name}, ${geo.country}` : geo.country };
+      // A county or region has no city, so its own name labels it ("Houston County")
+      const name = geo.city || placeName || geo.region;
+      return { geo, name: name && name !== geo.country ? name : undefined };
     });
 
     // Several matches in one country also show their region, such as a US state
-    const matches: LocationMatch[] = places.map(({ geo, short }) => {
+    const matches: LocationMatch[] = places.map(({ geo, name }) => {
       const sameCountry = places.filter((p) => p.geo.country === geo.country).length;
-      const label =
-        sameCountry > 1 && geo.city && geo.region
-          ? `${geo.city}, ${geo.region}, ${geo.country}`
-          : short;
-      return { label, geo };
+      const parts =
+        sameCountry > 1 && geo.region && geo.region !== name
+          ? [name, geo.region, geo.country]
+          : [name, geo.country];
+      return { label: parts.filter(Boolean).join(", "), geo };
     });
     return matches.filter((m, i) => matches.findIndex((o) => o.label === m.label) === i);
   } catch {
