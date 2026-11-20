@@ -376,7 +376,7 @@ export const resources: Resource[] = [
     id: "controlai-legislators",
     title: "Contact your legislators about AI safety",
     description:
-      "ControlAI drafts an email to your representatives, and you review it before it goes out.",
+      "Get an email to your lawmakers drafted for you. In the US and UK, ControlAI also finds who represents you.",
     url: "https://act.controlai.org/actions/contact-your-representatives",
     source_org: "ControlAI",
     category: "other",
