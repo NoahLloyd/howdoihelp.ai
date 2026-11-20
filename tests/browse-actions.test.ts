@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { assignActionSub, sortActions } from "../src/lib/browse-actions";
+import { assignActionSub, isAvailableTo } from "../src/lib/browse-actions";
 import { resources } from "../src/data/resources";
-import type { Resource } from "../src/types";
+import type { GeoData, Resource } from "../src/types";
+
+const belgium: GeoData = { country: "Belgium", countryCode: "BE", city: "Brussels", region: "Brussels Capital" };
+const us: GeoData = { country: "United States", countryCode: "US", city: "Houston", region: "Texas" };
+const uk: GeoData = { country: "United Kingdom", countryCode: "GB", city: "London", region: "England" };
 
 function resource(overrides: Partial<Resource>): Resource {
   return {
@@ -37,19 +41,26 @@ test("career and bigger commitments go to Go further", () => {
   assert.equal(assignActionSub(resource({ id: "tabling" })), "further");
 });
 
-test("contact tools come first in their fixed order, whatever their scores", () => {
-  const sorted = [
-    resource({ id: "high-score", ev_general: 1, friction: 0.01 }),
-    resource({ id: "callcongress", ev_general: 0.1, friction: 1 }),
-    resource({ id: "low-score", ev_general: 0.1, friction: 1 }),
-    resource({ id: "ifanyonebuildsit-act", ev_general: 0.1, friction: 1 }),
-    resource({ id: "controlai-legislators", ev_general: 0.1, friction: 1 }),
-  ].sort(sortActions);
+test("cards for everywhere show in every country, and when the location is unknown", () => {
+  for (const location of ["Global", "Online", ""]) {
+    assert.equal(isAvailableTo(resource({ location }), belgium), true);
+  }
+  assert.equal(isAvailableTo(resource({ location: "US only" }), null), true);
+  assert.equal(isAvailableTo(resource({ location: "US only" }), { country: "Unknown", countryCode: "XX" }), true);
+});
 
-  assert.deepEqual(
-    sorted.map((r) => r.id),
-    ["controlai-legislators", "ifanyonebuildsit-act", "callcongress", "high-score", "low-score"],
-  );
+test("a US-only card shows in the US and hides in Belgium", () => {
+  const card = resource({ location: "US only" });
+  assert.equal(isAvailableTo(card, us), true);
+  assert.equal(isAvailableTo(card, belgium), false);
+});
+
+test("country codes match whole words only, and UK matches Great Britain", () => {
+  const boston: GeoData = { country: "United States", countryCode: "US", city: "Boston", region: "Massachusetts" };
+  assert.equal(isAvailableTo(resource({ location: "Houston" }), boston), false);
+  assert.equal(isAvailableTo(resource({ location: "Belgium, BE" }), us), false);
+  assert.equal(isAvailableTo(resource({ location: "UK only" }), uk), true);
+  assert.equal(isAvailableTo(resource({ location: "Brussels, Belgium" }), belgium), true);
 });
 
 test("the US contact tools are labeled in the seed list", () => {

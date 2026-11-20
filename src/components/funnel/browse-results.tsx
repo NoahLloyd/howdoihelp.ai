@@ -25,7 +25,8 @@ import { LocationPicker } from "@/components/results/location-picker";
 import { BrowseSkeleton } from "@/components/ui/skeletons";
 import {
   assignActionSub,
-  sortActions,
+  isAvailableEverywhere,
+  isAvailableTo,
   sortByImpact,
   type ActionSubId,
 } from "@/lib/browse-actions";
@@ -255,15 +256,25 @@ export function BrowseResults({ variant, headerContent, overrides }: BrowseResul
     [allResources, variant, geo]
   );
 
-  // Group resources by path
+  // Group resources by path. Take action leaves out cards for other countries.
   const grouped = useMemo(() => {
     const map = new Map<PathId, Resource[]>();
     for (const path of PATHS) map.set(path.id, []);
     for (const resource of allResources) {
-      map.get(assignPath(resource))?.push(resource);
+      const path = assignPath(resource);
+      if (path === "act" && !isAvailableTo(resource, geo)) continue;
+      map.get(path)?.push(resource);
     }
     return map;
-  }, [allResources]);
+  }, [allResources, geo]);
+
+  // The location pill shows only on tabs where the location changes something
+  const actHasPlaceCards = useMemo(
+    () => allResources.some((r) => assignPath(r) === "act" && !isAvailableEverywhere(r)),
+    [allResources]
+  );
+  const showLocation =
+    activePath === "connect" || (activePath === "act" && actHasPlaceCards);
 
   const activePathDef = PATHS.find((p) => p.id === activePath)!;
 
@@ -333,9 +344,16 @@ export function BrowseResults({ variant, headerContent, overrides }: BrowseResul
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25 }}
           >
-            <p className="mt-5 text-sm text-muted-foreground">
-              {activePathDef.description}
-            </p>
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {activePathDef.description}
+              </p>
+              {geo && showLocation && (
+                <div className="shrink-0">
+                  <LocationPicker geo={geo} onLocationChange={handleLocationChange} align="right" />
+                </div>
+              )}
+            </div>
 
             <div className="mt-4">
               {activePath === "act" ? (
@@ -350,7 +368,6 @@ export function BrowseResults({ variant, headerContent, overrides }: BrowseResul
                   variant={variant}
                   geo={geo}
                   onClickTrack={handleResourceClick}
-                  onLocationChange={handleLocationChange}
                 />
               ) : activePath === "learn" ? (
                 <LearnExplorer
@@ -543,7 +560,7 @@ function ActionExplorer({ resources, variant, onClickTrack }: ActionExplorerProp
     if (search) {
       items = items.filter((r) => matchesSearch(r, search));
     }
-    return [...items].sort(sortActions);
+    return [...items].sort(sortByImpact);
   }, [pool, search]);
 
   const tabCounts: Record<ActionSubId, number> = {
@@ -612,10 +629,9 @@ interface ConnectExplorerProps {
   variant: Variant;
   geo: GeoData | null;
   onClickTrack: (resourceId: string, position: number) => void;
-  onLocationChange: (geo: GeoData) => void;
 }
 
-function ConnectExplorer({ resources, variant, geo, onClickTrack, onLocationChange }: ConnectExplorerProps) {
+function ConnectExplorer({ resources, variant, geo, onClickTrack }: ConnectExplorerProps) {
   const [search, setSearch] = useState("");
 
   // Split resources by sub-type — online items go into the "Online" tab
@@ -730,14 +746,6 @@ function ConnectExplorer({ resources, variant, geo, onClickTrack, onLocationChan
         onChange={setSearch}
         placeholder={`Search ${tab === "communities" ? "communities" : tab === "events" ? "events" : "resources"}...`}
       />
-
-      {/* Location context */}
-      {geo && geo.city && (
-        <div className="flex items-center text-xs text-muted-foreground">
-          <span>Sorted by distance from</span>
-          <LocationPicker geo={geo} onLocationChange={onLocationChange} />
-        </div>
-      )}
 
       {/* Results */}
       <ResourceList
