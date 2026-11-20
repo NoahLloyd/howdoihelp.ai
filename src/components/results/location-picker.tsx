@@ -23,8 +23,11 @@ export function LocationPicker({ geo, onLocationChange, autoOpen, align = "left"
   const [open, setOpen] = useState(false);
   const autoOpenedRef = useRef(false);
   const [value, setValue] = useState("");
+  const [typed, setTyped] = useState(false);
   const [loading, setLoading] = useState(false);
   const [matches, setMatches] = useState<LocationMatch[]>([]);
+  /** The text the current matches belong to */
+  const [matchesFor, setMatchesFor] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLSpanElement>(null);
 
@@ -79,11 +82,35 @@ export function LocationPicker({ geo, onLocationChange, autoOpen, align = "left"
     return () => document.removeEventListener("keydown", handleKey);
   }, [open]);
 
+  // Suggest places while the visitor types, after a short pause
+  useEffect(() => {
+    const query = value.trim();
+    if (!open || !typed || query.length < 2) return;
+    const controller = new AbortController();
+    const t = setTimeout(async () => {
+      const found = await searchLocations(query, geo, controller.signal);
+      if (controller.signal.aborted) return;
+      setMatches(found);
+      setMatchesFor(query);
+    }, 250);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+  }, [value, typed, open, geo]);
+
   function handleOpen(e: React.MouseEvent) {
     e.stopPropagation();
     setValue(displayCity || "");
+    setTyped(false);
     setMatches([]);
     setOpen(true);
+  }
+
+  function handleType(text: string) {
+    setValue(text);
+    setTyped(true);
+    if (text.trim().length < 2) setMatches([]);
   }
 
   function choose(newGeo: GeoData) {
@@ -92,21 +119,22 @@ export function LocationPicker({ geo, onLocationChange, autoOpen, align = "left"
     setOpen(false);
   }
 
+  /** Enter and the arrow button pick the first suggestion */
   async function handleSubmit() {
     const trimmed = value.trim();
     if (!trimmed) {
       setOpen(false);
       return;
     }
+    if (matchesFor === trimmed && matches.length > 0) {
+      choose(matches[0].geo);
+      return;
+    }
 
     setLoading(true);
     const found = await searchLocations(trimmed, geo);
     setLoading(false);
-    if (found.length > 1) {
-      setMatches(found);
-    } else {
-      choose(found[0]?.geo ?? { ...geo, city: trimmed, region: undefined });
-    }
+    choose(found[0]?.geo ?? { ...geo, city: trimmed, region: undefined });
   }
 
   return (
@@ -153,7 +181,7 @@ export function LocationPicker({ geo, onLocationChange, autoOpen, align = "left"
                 ref={inputRef}
                 type="text"
                 value={value}
-                onChange={(e) => { setValue(e.target.value); setMatches([]); }}
+                onChange={(e) => handleType(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSubmit();
                 }}
@@ -179,14 +207,14 @@ export function LocationPicker({ geo, onLocationChange, autoOpen, align = "left"
                 </svg>
               </button>
             </div>
-            {matches.length > 1 && (
+            {matches.length > 0 && (
               <ul className="mt-2 flex flex-col">
-                {matches.map((m) => (
+                {matches.map((m, i) => (
                   <li key={m.label}>
                     <button
                       type="button"
                       onClick={() => choose(m.geo)}
-                      className="w-full rounded-lg px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent/5 hover:text-accent"
+                      className={`w-full rounded-lg px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent/5 hover:text-accent ${i === 0 ? "bg-accent/5" : ""}`}
                     >
                       {m.label}
                     </button>
@@ -201,55 +229,47 @@ export function LocationPicker({ geo, onLocationChange, autoOpen, align = "left"
   );
 }
 
-interface NominatimAddress {
-  city?: string;
-  town?: string;
-  village?: string;
-  municipality?: string;
-  state?: string;
-  county?: string;
-  country?: string;
-  country_code?: string;
+interface PhotonPlace {
+  properties: {
+    name?: string;
+    type?: string;
+    county?: string;
+    state?: string;
+    country?: string;
+    countrycode?: string;
+  };
 }
 
 /**
- * Look up a typed place with OpenStreetMap (Nominatim) and return its top
- * matches in English, each labeled with its country. An empty list means
- * nothing was found or the lookup failed.
+ * Look up a typed place with Photon, an OpenStreetMap search made for
+ * search-as-you-type (Nominatim's rules forbid that use). Returns the top
+ * cities, counties, states, and countries in English, each labeled with its
+ * country. An empty list means nothing was found or the lookup failed.
  */
 async function searchLocations(
   query: string,
-  fallback: GeoData
+  fallback: GeoData,
+  signal?: AbortSignal
 ): Promise<LocationMatch[]> {
   try {
-    const params = new URLSearchParams({
-      q: query,
-      format: "json",
-      limit: "5",
-      addressdetails: "1",
-      "accept-language": "en",
+    const params = new URLSearchParams({ q: query, limit: "5", lang: "en" });
+    for (const layer of ["city", "county", "state", "country"]) params.append("layer", layer);
+    const res = await fetch(`https://photon.komoot.io/api/?${params}`, {
+      signal: signal ?? AbortSignal.timeout(4000),
     });
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?${params}`,
-      {
-        headers: { "User-Agent": "HowDoIHelpAI/1.0" },
-        signal: AbortSignal.timeout(4000),
-      }
-    );
-    if (!res.ok) throw new Error("Nominatim request failed");
+    if (!res.ok) throw new Error("Photon request failed");
 
-    const results: { name?: string; address?: NominatimAddress }[] = await res.json();
-    const places = results.map(({ name: placeName, address: addr = {} }) => {
+    const { features = [] }: { features?: PhotonPlace[] } = await res.json();
+    const places = features.map(({ properties: p }) => {
       const geo: GeoData = {
-        country: addr.country || fallback.country,
-        countryCode: (addr.country_code || fallback.countryCode).toUpperCase(),
-        city: addr.city || addr.town || addr.village || addr.municipality || undefined,
-        region: addr.state || addr.county || undefined,
+        country: p.country || fallback.country,
+        countryCode: (p.countrycode || fallback.countryCode).toUpperCase(),
+        city: p.type === "city" ? p.name : undefined,
+        region: p.type === "state" ? p.name : p.state || p.county || undefined,
         timezone: fallback.timezone,
         isAuthoritarian: fallback.isAuthoritarian,
       };
-      // A county or region has no city, so its own name labels it ("Houston County")
-      const name = geo.city || placeName || geo.region;
+      const name = p.type === "country" ? undefined : p.name;
       return { geo, name: name && name !== geo.country ? name : undefined };
     });
 
