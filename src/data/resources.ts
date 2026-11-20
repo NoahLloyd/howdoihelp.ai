@@ -254,7 +254,7 @@ export const resources: Resource[] = [
     min_minutes: 120,
     ev_general: 0.5,
     friction: 0.05,
-    enabled: true,
+    enabled: false,
     status: "approved",
     created_at: "2026-03-03T00:00:00Z",
   },
