@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, FileText, Sparkles, User, Lock } from "lucide-react";
-import { fetchResources } from "@/lib/data";
+import { fetchResourcesWithOverrides } from "@/lib/data";
+import type { CreatorOverrides } from "@/lib/data";
 import { rankResources, buildLocalCard } from "@/lib/ranking";
 import { getGeoData } from "@/lib/geo";
 import { getUserId, upsertUser } from "@/lib/user";
@@ -107,6 +108,8 @@ interface ProcessingFlowProps {
   platform: ProfilePlatform;
   variant: Variant;
   profileText?: string;
+  /** Hide and boost settings from a creator page */
+  overrides?: CreatorOverrides;
   onComplete: (
     items: ResultItem[],
     geo: GeoData,
@@ -275,6 +278,7 @@ export function ProcessingFlow({
   platform,
   variant,
   profileText,
+  overrides,
   onComplete,
 }: ProcessingFlowProps) {
   const [view, setView] = useState<ViewState>({
@@ -321,7 +325,7 @@ export function ProcessingFlow({
     let geo: GeoData = { country: "Unknown", countryCode: "XX", isAuthoritarian: false };
 
     // Start fetching resources + geo in background immediately
-    const bgFetch = Promise.all([fetchResources(), getGeoData()]);
+    const bgFetch = Promise.all([fetchResourcesWithOverrides(overrides), getGeoData()]);
 
     // ─── Scrape + Search helper (shared by GitHub, X, Instagram, other URL) ───
 

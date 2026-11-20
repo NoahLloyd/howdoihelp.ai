@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { fetchResources, trackClick } from "@/lib/data";
+import { fetchResourcesWithOverrides, trackClick } from "@/lib/data";
+import type { CreatorOverrides } from "@/lib/data";
 import { getGeoData } from "@/lib/geo";
 import {
   trackResultsViewed,
@@ -199,9 +200,11 @@ function applySortToResources(resources: Resource[], sort: SortId): Resource[] {
 interface BrowseResultsProps {
   variant: Variant;
   headerContent?: React.ReactNode;
+  /** Hide and boost settings from a creator page */
+  overrides?: CreatorOverrides;
 }
 
-export function BrowseResults({ variant, headerContent }: BrowseResultsProps) {
+export function BrowseResults({ variant, headerContent, overrides }: BrowseResultsProps) {
   const [allResources, setAllResources] = useState<Resource[]>([]);
   const [geo, setGeo] = useState<GeoData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -215,7 +218,7 @@ export function BrowseResults({ variant, headerContent }: BrowseResultsProps) {
   useEffect(() => {
     async function init() {
       const [resources, geoData] = await Promise.all([
-        fetchResources(),
+        fetchResourcesWithOverrides(overrides),
         getGeoData(),
       ]);
       setAllResources(resources);
@@ -230,7 +233,7 @@ export function BrowseResults({ variant, headerContent }: BrowseResultsProps) {
       setLoading(false);
     }
     init();
-  }, [variant]);
+  }, [variant, overrides]);
 
   // Scroll depth tracking
   useEffect(() => {
