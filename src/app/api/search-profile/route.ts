@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { searchPerson as perplexitySearch } from "@/lib/perplexity";
 import { searchPerson as exaSearch } from "@/lib/exa";
 import { searchPerson as tavilySearch } from "@/lib/tavily";
-import { getSupabase } from "@/lib/supabase";
+import { logApiUsage } from "@/lib/api-usage";
 
 export type SearchProvider = "perplexity" | "exa" | "tavily";
 
@@ -36,9 +36,8 @@ export async function POST(req: Request) {
     const { text, citations, usage } = await search(query.trim());
 
     // Log usage
-    const supabase = getSupabase();
-    if (supabase && usage.estimated_cost_usd) {
-      await supabase.from("api_usage").insert([usage]).then(() => {}, () => {});
+    if (usage.estimated_cost_usd) {
+      await logApiUsage([usage]);
     }
 
     if (!text) {

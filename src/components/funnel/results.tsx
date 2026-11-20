@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { fetchResources, trackClick } from "@/lib/data";
+import { fetchResourcesWithOverrides, trackClick } from "@/lib/data";
+import type { CreatorOverrides } from "@/lib/data";
 import { rankResources, buildLocalCard } from "@/lib/ranking";
 import { getGeoData } from "@/lib/geo";
 import {
@@ -83,9 +84,11 @@ interface ResultsProps {
   precomputedGeo?: GeoData;
   /** Navigate to the full browse view */
   onBrowse?: () => void;
+  /** Hide and boost settings from a creator page */
+  overrides?: CreatorOverrides;
 }
 
-export function Results({ variant, answers, precomputedItems, precomputedGeo, onBrowse }: ResultsProps) {
+export function Results({ variant, answers, precomputedItems, precomputedGeo, onBrowse, overrides }: ResultsProps) {
   const [items, setItems] = useState<ResultItem[]>(precomputedItems ?? []);
   const [geo, setGeo] = useState<GeoData | null>(precomputedGeo ?? null);
   const [localGeo, setLocalGeo] = useState<GeoData | null>(precomputedGeo ?? null);
@@ -100,17 +103,17 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo, on
     if (!precomputedItems) return;
     const idx = precomputedItems.findIndex((item) => item.kind === "local");
     localCardIndexRef.current = idx >= 0 ? idx : null;
-    fetchResources().then(setAllResources);
+    fetchResourcesWithOverrides(overrides).then(setAllResources);
     // Save precomputed recommendations for return visits
     saveRecommendationSession(precomputedItems, answers, variant, precomputedGeo ?? null);
-  }, [precomputedItems]);
+  }, [precomputedItems, overrides]);
 
   useEffect(() => {
     // Skip init when precomputed items are provided (Variant A processing flow)
     if (precomputedItems) return;
 
     async function init() {
-      const resources = await fetchResources();
+      const resources = await fetchResourcesWithOverrides(overrides);
       const geoData: GeoData = await getGeoData();
       setAllResources(resources);
       setGeo(geoData);
@@ -167,7 +170,7 @@ export function Results({ variant, answers, precomputedItems, precomputedGeo, on
     }
 
     init();
-  }, [variant, answers, precomputedItems]);
+  }, [variant, answers, precomputedItems, overrides]);
 
   /** Claude-powered ranking for Variant A with profile data */
   async function computeClaudeRanking(

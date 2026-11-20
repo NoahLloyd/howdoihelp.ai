@@ -1,0 +1,9 @@
+.context/
+.env*
+node_modules/
+.next/
+.git/
+.vercel/
+coverage/
+*.tsbuildinfo
+.DS_Store

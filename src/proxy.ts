@@ -1,16 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { ADMIN_SESSION_COOKIE, verifyAdminSession } from "@/lib/admin-session";
 
 export async function proxy(request: NextRequest) {
-  // ─── Admin routes: simple password-cookie check ──────────
+  // Admin actions and API routes also verify the session independently.
   if (request.nextUrl.pathname.startsWith("/admin")) {
     if (request.nextUrl.pathname === "/admin/login") {
       return NextResponse.next();
     }
 
-    const sessionCookie = request.cookies.get("admin_session");
-    if (!sessionCookie || sessionCookie.value !== "authenticated") {
+    const sessionCookie = request.cookies.get(ADMIN_SESSION_COOKIE);
+    if (!verifyAdminSession(sessionCookie?.value)) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
 
