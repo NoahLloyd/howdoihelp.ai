@@ -64,7 +64,7 @@ test("country codes match whole words only, and UK matches Great Britain", () =>
 });
 
 test("the US contact tools are labeled in the seed list", () => {
-  for (const id of ["ifanyonebuildsit-act", "callcongress"]) {
+  for (const id of ["ifanyonebuildsit-act", "callcongress", "fli-contact-legislators"]) {
     const row = resources.find((r) => r.id === id);
     assert.ok(row, `${id} is missing`);
     assert.equal(row.location, "US only");

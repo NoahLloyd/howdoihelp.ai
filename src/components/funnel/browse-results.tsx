@@ -154,6 +154,8 @@ function matchesSearch(r: Resource, query: string): boolean {
 }
 
 const INITIAL_SHOW = 6;
+/** "Show more" appears only when it hides at least this many cards */
+const MIN_HIDDEN = 3;
 
 // ─── Sort definitions ─────────────────────────────────────────
 
@@ -473,7 +475,7 @@ function ResourceList({
     );
   }
 
-  const needsTruncation = resources.length > initialShow;
+  const needsTruncation = resources.length - initialShow >= MIN_HIDDEN;
   const visible = expanded || !needsTruncation ? resources : resources.slice(0, initialShow);
   const hiddenCount = resources.length - initialShow;
 
