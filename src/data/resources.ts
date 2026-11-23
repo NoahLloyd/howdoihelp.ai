@@ -437,6 +437,22 @@ export const resources: Resource[] = [
     created_at: "2026-10-31T00:00:00Z",
   },
   {
+    id: "fli-contact-legislators",
+    title: "Email Congress about AI",
+    description:
+      "FLI finds your Congressperson and Senators, writes a message you can edit, and sends it for you.",
+    url: "https://futureoflife.org/take-action/contact-your-legislator/",
+    source_org: "Future of Life Institute",
+    category: "other",
+    location: "US only",
+    min_minutes: 5,
+    ev_general: 0.55,
+    friction: 0.1,
+    enabled: true,
+    status: "approved",
+    created_at: "2026-11-22T00:00:00Z",
+  },
+  {
     id: "tabling",
     title: "Set up a table on campus or in your community",
     description:
