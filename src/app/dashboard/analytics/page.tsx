@@ -373,6 +373,29 @@ export default function AnalyticsPage() {
         </ChartCard>
       </div>
 
+      {/* How visitors arrived */}
+      <ChartCard title="How Visitors Arrived" className="mt-4">
+        <p className="-mt-2 mb-3 text-xs text-muted-foreground">
+          Bio link: taps on your Instagram bio link, which Instagram marks with
+          link_in_bio. Typed or no source: people typed your address, for example
+          from a video.
+        </p>
+        {data.arrivals.length > 0 ? (
+          <div className="space-y-2">
+            {data.arrivals.map((r, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <p className="text-sm text-foreground truncate flex-1">{r.label}</p>
+                <span className="text-xs font-medium text-accent shrink-0">
+                  {r.visitors}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState />
+        )}
+      </ChartCard>
+
       {/* Device + Country breakdown */}
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <ChartCard title="Devices">

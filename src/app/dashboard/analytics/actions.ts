@@ -62,6 +62,8 @@ export interface AnalyticsData {
   funnel: { step: string; count: number; rate: number }[];
   topResources: { title: string; clicks: number }[];
   referralSources: { source: string; count: number }[];
+  /** Visitors by how they arrived: bio link tag, no source (typed), or another site */
+  arrivals: { label: string; visitors: number }[];
   deviceBreakdown: { device: string; count: number }[];
   countryBreakdown: { country: string; count: number }[];
   dailyClicks: { date: string; clicks: number }[];
@@ -115,6 +117,7 @@ async function fetchAnalyticsData(
     countryRes,
     dailyClicksRes,
     questionRes,
+    arrivalsRes,
   ] = await Promise.all([
     // 1. Overview stats
     posthogQuery(`
@@ -225,6 +228,24 @@ async function fetchAnalyticsData(
       ORDER BY answered DESC
       LIMIT 10
     `),
+
+    // 10. How visitors arrived. Instagram adds utm_content=link_in_bio to taps
+    // on a bio link, and a typed address has no referring site. A failure here
+    // hides only this section.
+    posthogQuery(`
+      SELECT
+        multiIf(
+          properties.$current_url LIKE '%link_in_bio%', 'Bio link',
+          properties.$referring_domain IS NULL
+            OR properties.$referring_domain IN ('', '$direct'), 'Typed or no source',
+          'Other sites'
+        ) as arrival,
+        uniq(distinct_id) as visitors
+      FROM events
+      WHERE event = '$pageview' AND ${dateFilter} ${slugPageFilter}
+      GROUP BY arrival
+      ORDER BY visitors DESC
+    `).catch(() => ({})),
   ]);
 
   // Parse results helper
@@ -279,6 +300,12 @@ async function fetchAnalyticsData(
     count: Number(r[1]) || 0,
   }));
 
+  // Parse arrivals
+  const arrivals = rows(arrivalsRes).map((r) => ({
+    label: String(r[0] || "Unknown"),
+    visitors: Number(r[1]) || 0,
+  }));
+
   // Parse device breakdown
   const deviceBreakdown = rows(deviceRes).map((r) => ({
     device: String(r[0] || "Unknown"),
@@ -318,6 +345,7 @@ async function fetchAnalyticsData(
     funnel,
     topResources,
     referralSources,
+    arrivals,
     deviceBreakdown,
     countryBreakdown,
     dailyClicks,
